@@ -13,14 +13,10 @@ HJD = DATA_WHOLE[:, 0]                        #Heliocentric Julian Day
 JD_MOD = HJD - 2450000                        #Modified Julian Day
 MAG = DATA_WHOLE[:, 1]                        #magnitude
 FLUX_REL = DATA_WHOLE[:, 3]                   #Relative Flux (=1 out of transit)
-
+print(sys.argv)
 #Phase Fold the data
 epoch = float(sys.argv[2])                    #epoch of first transit and orbital period
 period = float(sys.argv[3])                          
-
-#print(sys.argv)
-#print(epoch)
-#print(period)
 
 timebase = JD_MOD - epoch                     #sets time relative to first transit
 phase = np.zeros_like(timebase)
@@ -35,31 +31,21 @@ for i in range(len(phase)):
     elif phase[i] > 0.8:
         phase[i] = phase[i] - 1
 
-#Bin the data
-bin_size = int(float(sys.argv[4]))
-binned_dataset_length = np.int(len(phase) / bin_size)
-
-binned_phase = np.zeros(binned_dataset_length)
-binned_flux = np.zeros(binned_dataset_length)
-
-for j in range(binned_dataset_length):
-    binned_phase[j] = np.mean(phase[j * bin_size : (j+1) * bin_size])
-    binned_flux[j] = np.mean(FLUX_REL[j * bin_size : (j+1) * bin_size])
-
 #Produce the plots
-title = sys.argv[5]
+title = sys.argv[4]
 axis_font = {'fontname':'Times New Roman', 'size':'20'}
 
 fig = plt.figure()
 
 ax1 = fig.add_subplot(211)
-ax1.plot(phase, FLUX_REL, 'ko')
+ax1.plot(JD_MOD, FLUX_REL, 'ko', markersize=1)
 ax1.set_ylabel('Relative Flux', **axis_font)
-ax1.set_title(title, **axis_font)
+ax1.set_xlabel('Time [HJD - 2450000]')
 
 ax2 = fig.add_subplot(212)
-ax2.plot(binned_phase, binned_flux, 'bo')
-ax2.set_xlabel('Phase', **axis_font)
+ax2.plot(phase * period, FLUX_REL, 'ko', markersize=1)
 ax2.set_ylabel('Relative Flux', **axis_font)
+ax2.set_xlabel('Phase [days]')
+ax1.set_title(title, **axis_font)
 
 plt.show()

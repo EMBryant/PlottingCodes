@@ -33,7 +33,7 @@ if pipeline == 'qlp':
 	FLUX = DATA_WHOLE['SAP_FLUX']
 
 #remove zero entries
-zero_entries = np.where(FLUX == 0)						#Locate entries in the FLUX column which have a value of 0
+zero_entries = np.where(FLUX == 0)				#Locate entries in the FLUX column which have a value of 0
 FLUX_zeroremoved = np.delete(FLUX, zero_entries)	#Remove corresponding entries from both FLUX and TIME columns
 time_zeroremoved = np.delete(time, zero_entries)
 
@@ -83,11 +83,16 @@ phase_cleaned = np.delete(phase_days, outlier_indices)
 FLUX_cleaned = np.delete(FLUX_nullremoved, outlier_indices)
 time_cleaned = np.delete(time_nullremoved, outlier_indices)
 
+axis_font = {'fontname':'Times New Roman', 'size':'20'}
+
 #Test plot
 plt.figure()
 
-plt.plot(phase_days, FLUX_nullremoved, 'ro', markersize=1)
-plt.plot(phase_cleaned, FLUX_cleaned, 'ko', markersize=1)
+plt.plot(phase_days, FLUX_nullremoved / median, 'ro', markersize=1)
+plt.plot(phase_cleaned, FLUX_cleaned / median, 'ko', markersize=1)
+
+plt.xlabel('Phase [days]', **axis_font)
+plt.ylabel('Relative Flux', **axis_font)
 
 
 plt.show()
@@ -100,16 +105,16 @@ fig = plt.figure()
 #Top subplot: Unfolded LC
 ax1 = fig.add_subplot(211)
 ax1.plot(time_cleaned, FLUX_cleaned / median, 'ko', markersize='1')
-ax1.set_ylabel('Relative Flux')
+ax1.set_ylabel('Relative Flux', **axis_font)
 
-ax1.set_title(TITLE)
-ax1.set_xlabel('Time [BJD - 2457000]')
+ax1.set_title(TITLE, **axis_font)
+ax1.set_xlabel('Time [BJD - 2457000]', **axis_font)
 
 #Bottom subplot: Folded LC
 ax2 = fig.add_subplot(212)
 
 ax2.plot(phase_cleaned, FLUX_cleaned / median, 'bo', markersize='1')
-ax2.set_ylabel('Relative Flux')
-ax2.set_xlabel('Phase [days]')
+ax2.set_ylabel('Relative Flux', **axis_font)
+ax2.set_xlabel('Phase [days]', **axis_font)
 
 plt.show()
