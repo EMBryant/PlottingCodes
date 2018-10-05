@@ -71,7 +71,7 @@ phase_OOT = np.delete(phase_days, transit_indices)				#"Out Of Transit" phase va
 sigma = np.std(FLUX_OOT)										#Standard deviation of out-of-transit flux values
 median = np.median(FLUX_OOT)									#median of all out-of-transit flux values
 
-check_indices = np.where(np.abs(FLUX_nullremoved - median) > 5*sigma)     #Indices of all flux values > +5sigma from median - includes points during transits!
+check_indices = np.where(np.abs(FLUX_nullremoved - median) > 3*sigma)     #Indices of all flux values > +5sigma from median - includes points during transits!
 print(len(transit_indices[0]), len(check_indices[0]))
 outlier_indices = np.array([])
 for i in range(len(check_indices[0])):
@@ -81,6 +81,7 @@ for i in range(len(check_indices[0])):
 print(len(outlier_indices))
 phase_cleaned = np.delete(phase_days, outlier_indices)
 FLUX_cleaned = np.delete(FLUX_nullremoved, outlier_indices)
+time_cleaned = np.delete(time_nullremoved, outlier_indices)
 
 #Test plot
 plt.figure()
@@ -98,7 +99,7 @@ fig = plt.figure()
 
 #Top subplot: Unfolded LC
 ax1 = fig.add_subplot(211)
-ax1.plot(time_zeroremoved, FLUX_zeroremoved / median, 'ko', markersize='1')
+ax1.plot(time_cleaned, FLUX_cleaned / median, 'ko', markersize='1')
 ax1.set_ylabel('Relative Flux')
 
 ax1.set_title(TITLE)
