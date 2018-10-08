@@ -12,9 +12,9 @@ import pandas
 
 #Load command line arguments
 file_name = sys.argv[1]               		#name of FITS file containing LC data
-TOI = float(sys.argv[2])
+TOI = float(sys.argv[2])					#TOI ID of the object
 
-df = pandas.read_csv('../TESS/TOIs_Sec1_20180905.csv', index_col='toi_id')
+df = pandas.read_csv('../TESS/TOIs_Sec1_20180905.csv', index_col='toi_id')		#.csv file containing info on parameters (period, epoch, ID, etc.) of all TOIs
 
 
 epoch = df.loc[TOI, 'Epoc'] 		      	#Time of first transit centre [BJD - 2457000]
@@ -22,9 +22,11 @@ period = df.loc[TOI, 'Period']			  	#Orbital Period [days]
 T_dur = df.loc[TOI, 'Duration']				#Transit duration [hours]
 pipeline = df.loc[TOI, 'src']				#Pipeline used to reduce data - so that can call correct columns
 TIC_ID = df.loc[TOI, 'tic_id']              #TIC ID for the object - used for plot title
-TITLE = "TOI ID: TOI; "				  		#Title for plot
 
-print epoch, period, T_dur
+print "Epoch of first transit is {} [BJD - 2457000]".format(epoch)
+print "Orbital period is {} days".format(period)
+print "Transit duration is {} hours ({} days)".format(T_dur, T_dur/24.)
+print "Pipeline used to process data is {}".format(pipeline)
 
 #Load FITS file
 hdul = fits.open(file_name)           		#Read in FITS file
@@ -40,34 +42,17 @@ if pipeline == 'spoc':
 if pipeline == 'qlp':
 	FLUX = DATA_WHOLE['SAP_FLUX']
 
-#Clean up "bad" points:
+#Load Quality flags in to remove flagged data points
+flags = DATA_WHOLE['QUALITY']
+flag_indices = np.where(flags > 0)
 
-if pipeline == 'spoc':
-	#remove zero entries
-	zero_entries = np.where(FLUX == 0)				#Locate entries in the FLUX column which have a value of 0
-	FLUX_zeroremoved = np.delete(FLUX, zero_entries)	#Remove corresponding entries from both FLUX and TIME columns
-	time_zeroremoved = np.delete(time, zero_entries)
+flux_flagremoved = np.delete(FLUX, flag_indices)
+time_flagremoved = np.delete(time, flag_indices)
 
-	#remove null entries - time
-	null_entries_time = np.where(np.isnan(time_zeroremoved))						#Locate entries in the TIME column which have a value of 'nan'
-	FLUX_nullremoved_intermediate = np.delete(FLUX_zeroremoved, null_entries_time)	#Remove corresponding entries from both FLUX and TIME columns
-	time_nullremoved_intermediate = np.delete(time_zeroremoved, null_entries_time)
-
-	#remove null entries - flux
-	null_entries_flux = np.where(np.isnan(FLUX_nullremoved_intermediate))						#Locate entries in the TIME column which have a value of 'nan'
-	FLUX_nullremoved = np.delete(FLUX_nullremoved_intermediate, null_entries_flux)	#Remove corresponding entries from both FLUX and TIME columns
-	time_nullremoved = np.delete(time_nullremoved_intermediate, null_entries_flux)	
-	
-	
-
-if pipeline == 'qlp':
-	flag = DATA_WHOLE['QUALITY']
-	bad_indices = np.where(flag == 1)
-	FLUX_nullremoved = np.delete(FLUX, bad_indices)
-	time_nullremoved = np.delete(time, bad_indices)
-	
-	FLUX_bad = FLUX[bad_indices]
-	time_bad = time[bad_indices]
+#Remove time points during central gap
+null_indices = np.where(np.isnan(time_flagremoved))
+time_nullremoved = np.delete(time_flagremoved, null_indices)
+flux_nullremoved = np.delete(flux_flagremoved, null_indices)
 
 phase = np.zeros_like(time_nullremoved)					#Empty array to hold phase values
 
@@ -86,30 +71,28 @@ phase_hours = phase_days * 24
 
 #Now we want to mask out the transit points, to do statistices on the rest of the LC
 transit_indices = np.where(np.abs(phase_hours) <= T_dur / 2)	#Array indices of all phase/flux values during the transit
-FLUX_OOT = np.delete(FLUX_nullremoved, transit_indices)			#"Out Of Transit" flux values
+FLUX_OOT = np.delete(flux_nullremoved, transit_indices)			#"Out Of Transit" flux values
 phase_OOT = np.delete(phase_days, transit_indices)				#"Out Of Transit" phase values [units of days]
 
 sigma = np.std(FLUX_OOT)										#Standard deviation of out-of-transit flux values
 median = np.median(FLUX_OOT)									#median of all out-of-transit flux values
 
-check_indices = np.where(np.abs(FLUX_nullremoved - median) > 3*sigma)     #Indices of all flux values > +5sigma from median - includes points during transits!
-print(len(transit_indices[0]), len(check_indices[0]))
+check_indices = np.where(np.abs(flux_nullremoved - median) > 5*sigma)     #Indices of all flux values > +5sigma from median - includes points during transits!
 outlier_indices = np.array([])
 for i in range(len(check_indices[0])):
-	if len(np.where(transit_indices[0] == check_indices[0][i])[0]) == 0:		  #ie. if the index corresponds to a point not during a transit
-		outlier_indices = np.append(outlier_indices, check_indices[0][i])
+	if len(np.where(transit_indices[0] == check_indices[0][i])[0]) == 0:		  	#ie. if the index corresponds to a point not during a transit
+		outlier_indices = np.append(outlier_indices, check_indices[0][i])		  	#All points > +5sigma from median - NOT including transit points
 
-print(len(outlier_indices))
-phase_cleaned = np.delete(phase, outlier_indices)
-FLUX_cleaned = np.delete(FLUX_nullremoved, outlier_indices)
+phase_cleaned = np.delete(phase, outlier_indices)									#Remove all 5sigma points from phase, flux, and time
+FLUX_cleaned = np.delete(flux_nullremoved, outlier_indices)
 time_cleaned = np.delete(time_nullremoved, outlier_indices)
 
-axis_font = {'fontname':'Times New Roman', 'size':'20'}
+axis_font = {'fontname':'DejaVu Sans', 'size':'20'}
 
 #Test plot
 plt.figure()
 
-plt.plot(phase, FLUX_nullremoved / median, 'ro', markersize=1)
+plt.plot(phase, flux_nullremoved / median, 'ro', markersize=1)
 plt.plot(phase_cleaned, FLUX_cleaned / median, 'ko', markersize=1)
 
 plt.xlabel('Phase', **axis_font)
