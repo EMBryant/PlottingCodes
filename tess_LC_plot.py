@@ -1,7 +1,6 @@
 '''Code to read in and plot TESS LCs from FITS files
 
-Command line arguments needed: (1) File name; (2) First transit epoch; 
-(3) Period; (4) Transit duration; (5) Plot title; (6) Pipeline used'''
+Command line arguments needed: (1) File name; (2) TOI ID'''
 
 #Preliminary imports
 from __future__ import division
@@ -9,14 +8,23 @@ import numpy as np
 import matplotlib.pyplot as plt
 from astropy.io import fits
 import sys
+import pandas
 
 #Load command line arguments
 file_name = sys.argv[1]               		#name of FITS file containing LC data
-epoch = float(sys.argv[2])		      		#Time of first transit centre [BJD - 2457000]
-period = float(sys.argv[3])			  		#Orbital Period [days]
-T_dur = float(sys.argv[4])					#Transit duration [hours]
-TITLE = sys.argv[5]					  		#Title for plot
-pipeline = sys.argv[6]						#Pipeline used - allows appropriate flux header label to be used
+TOI = float(sys.argv[2])
+
+df = pandas.read_csv('../TESS/TOIs_Sec1_20180905.csv', index_col='toi_id')
+
+
+epoch = df.loc[TOI, 'Epoc'] 		      	#Time of first transit centre [BJD - 2457000]
+period = df.loc[TOI, 'Period']			  	#Orbital Period [days]
+T_dur = df.loc[TOI, 'Duration']				#Transit duration [hours]
+pipeline = df.loc[TOI, 'src']				#Pipeline used to reduce data - so that can call correct columns
+TIC_ID = df.loc[TOI, 'tic_id']              #TIC ID for the object - used for plot title
+TITLE = "TOI ID: TOI; "				  		#Title for plot
+
+print epoch, period, T_dur
 
 #Load FITS file
 hdul = fits.open(file_name)           		#Read in FITS file
@@ -79,7 +87,7 @@ for i in range(len(check_indices[0])):
 		outlier_indices = np.append(outlier_indices, check_indices[0][i])
 
 print(len(outlier_indices))
-phase_cleaned = np.delete(phase_days, outlier_indices)
+phase_cleaned = np.delete(phase, outlier_indices)
 FLUX_cleaned = np.delete(FLUX_nullremoved, outlier_indices)
 time_cleaned = np.delete(time_nullremoved, outlier_indices)
 
@@ -88,10 +96,11 @@ axis_font = {'fontname':'Times New Roman', 'size':'20'}
 #Test plot
 plt.figure()
 
-plt.plot(phase_days, FLUX_nullremoved / median, 'ro', markersize=1)
+plt.plot(phase, FLUX_nullremoved / median, 'ro', markersize=1)
 plt.plot(phase_cleaned, FLUX_cleaned / median, 'ko', markersize=1)
 
-plt.xlabel('Phase [days]', **axis_font)
+plt.xlabel('Phase', **axis_font)
+plt.gca().set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
 plt.ylabel('Relative Flux', **axis_font)
 
 
@@ -107,7 +116,7 @@ ax1 = fig.add_subplot(211)
 ax1.plot(time_cleaned, FLUX_cleaned / median, 'ko', markersize='1')
 ax1.set_ylabel('Relative Flux', **axis_font)
 
-ax1.set_title(TITLE, **axis_font)
+ax1.set_title('TOI: {} ;  TIC ID: {} ;  Period: {} days'.format(TOI, TIC_ID, period), **axis_font)
 ax1.set_xlabel('Time [BJD - 2457000]', **axis_font)
 
 #Bottom subplot: Folded LC
@@ -115,6 +124,8 @@ ax2 = fig.add_subplot(212)
 
 ax2.plot(phase_cleaned, FLUX_cleaned / median, 'bo', markersize='1')
 ax2.set_ylabel('Relative Flux', **axis_font)
-ax2.set_xlabel('Phase [days]', **axis_font)
+ax2.set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
+ax2.set_xlabel('Phase', **axis_font)
 
 plt.show()
+
