@@ -40,21 +40,34 @@ if pipeline == 'spoc':
 if pipeline == 'qlp':
 	FLUX = DATA_WHOLE['SAP_FLUX']
 
-#remove zero entries
-zero_entries = np.where(FLUX == 0)				#Locate entries in the FLUX column which have a value of 0
-FLUX_zeroremoved = np.delete(FLUX, zero_entries)	#Remove corresponding entries from both FLUX and TIME columns
-time_zeroremoved = np.delete(time, zero_entries)
+#Clean up "bad" points:
 
-#remove null entries - time
-null_entries_time = np.where(np.isnan(time_zeroremoved))						#Locate entries in the TIME column which have a value of 'nan'
-FLUX_nullremoved_intermediate = np.delete(FLUX_zeroremoved, null_entries_time)	#Remove corresponding entries from both FLUX and TIME columns
-time_nullremoved_intermediate = np.delete(time_zeroremoved, null_entries_time)
+if pipeline == 'spoc':
+	#remove zero entries
+	zero_entries = np.where(FLUX == 0)				#Locate entries in the FLUX column which have a value of 0
+	FLUX_zeroremoved = np.delete(FLUX, zero_entries)	#Remove corresponding entries from both FLUX and TIME columns
+	time_zeroremoved = np.delete(time, zero_entries)
 
-#remove null entries - flux
-null_entries_flux = np.where(np.isnan(FLUX_nullremoved_intermediate))						#Locate entries in the TIME column which have a value of 'nan'
-FLUX_nullremoved = np.delete(FLUX_nullremoved_intermediate, null_entries_flux)	#Remove corresponding entries from both FLUX and TIME columns
-time_nullremoved = np.delete(time_nullremoved_intermediate, null_entries_flux)
+	#remove null entries - time
+	null_entries_time = np.where(np.isnan(time_zeroremoved))						#Locate entries in the TIME column which have a value of 'nan'
+	FLUX_nullremoved_intermediate = np.delete(FLUX_zeroremoved, null_entries_time)	#Remove corresponding entries from both FLUX and TIME columns
+	time_nullremoved_intermediate = np.delete(time_zeroremoved, null_entries_time)
 
+	#remove null entries - flux
+	null_entries_flux = np.where(np.isnan(FLUX_nullremoved_intermediate))						#Locate entries in the TIME column which have a value of 'nan'
+	FLUX_nullremoved = np.delete(FLUX_nullremoved_intermediate, null_entries_flux)	#Remove corresponding entries from both FLUX and TIME columns
+	time_nullremoved = np.delete(time_nullremoved_intermediate, null_entries_flux)	
+	
+	
+
+if pipeline == 'qlp':
+	flag = DATA_WHOLE['QUALITY']
+	bad_indices = np.where(flag == 1)
+	FLUX_nullremoved = np.delete(FLUX, bad_indices)
+	time_nullremoved = np.delete(time, bad_indices)
+	
+	FLUX_bad = FLUX[bad_indices]
+	time_bad = time[bad_indices]
 
 phase = np.zeros_like(time_nullremoved)					#Empty array to hold phase values
 
@@ -66,7 +79,7 @@ for i in range(len(phase)):
 		phase[i] = phase[i] + 1
 		
 	if phase[i] > 0.75:
-		phase[i] = phase[i] - 1
+		phase[i] = phase[i] - 1	
 
 phase_days = phase * period								#two additional phase arrays, one in units of days, the other hours
 phase_hours = phase_days * 24
@@ -113,7 +126,9 @@ fig = plt.figure()
 
 #Top subplot: Unfolded LC
 ax1 = fig.add_subplot(211)
-ax1.plot(time_cleaned, FLUX_cleaned / median, 'ko', markersize='1')
+ax1.plot(time_cleaned, FLUX_cleaned / median, 'ko', markersize='1.5')
+if pipeline == 'qlp':
+	ax1.plot(time_bad, FLUX_bad / median, 'ro', markersize='1.5')
 ax1.set_ylabel('Relative Flux', **axis_font)
 
 ax1.set_title('TOI: {} ;  TIC ID: {} ;  Period: {} days'.format(TOI, TIC_ID, period), **axis_font)
@@ -122,7 +137,7 @@ ax1.set_xlabel('Time [BJD - 2457000]', **axis_font)
 #Bottom subplot: Folded LC
 ax2 = fig.add_subplot(212)
 
-ax2.plot(phase_cleaned, FLUX_cleaned / median, 'bo', markersize='1')
+ax2.plot(phase_cleaned, FLUX_cleaned / median, 'bo', markersize='1.5')
 ax2.set_ylabel('Relative Flux', **axis_font)
 ax2.set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
 ax2.set_xlabel('Phase', **axis_font)
