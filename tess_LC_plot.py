@@ -22,11 +22,13 @@ period = df.loc[TOI, 'Period']			  	#Orbital Period [days]
 T_dur = df.loc[TOI, 'Duration']				#Transit duration [hours]
 pipeline = df.loc[TOI, 'src']				#Pipeline used to reduce data - so that can call correct columns
 TIC_ID = df.loc[TOI, 'tic_id']              #TIC ID for the object - used for plot title
+comments = df.loc[TOI, 'Comment']			#Any existing comments on the object
 
 print "Epoch of first transit is {} [BJD - 2457000]".format(epoch)
 print "Orbital period is {} days".format(period)
 print "Transit duration is {} hours ({} days)".format(T_dur, T_dur/24.)
 print "Pipeline used to process data is {}".format(pipeline)
+print "Existing comments on this object are: {}".format(comments)
 
 #Load FITS file
 hdul = fits.open(file_name)           		#Read in FITS file
@@ -39,6 +41,7 @@ time = DATA_WHOLE['TIME']			  		#Time [BJD - 2457000]
 
 if pipeline == 'spoc':
 	FLUX = DATA_WHOLE['PDCSAP_FLUX']  		#PDC corrected flux from target star
+	raw_flux = DATA_WHOLE['SAP_FLUX']		#Simple Aperture Photometry flux from target star
 if pipeline == 'qlp':
 	FLUX = DATA_WHOLE['SAP_FLUX']
 
@@ -48,6 +51,7 @@ flag_indices = np.where(flags > 0)
 
 flux_flagremoved = np.delete(FLUX, flag_indices)
 time_flagremoved = np.delete(time, flag_indices)
+
 
 #Remove time points during central gap
 null_indices = np.where(np.isnan(time_flagremoved))
@@ -90,40 +94,61 @@ time_cleaned = np.delete(time_nullremoved, outlier_indices)
 axis_font = {'fontname':'DejaVu Sans', 'size':'20'}
 
 #Test plot
-plt.figure()
+#plt.figure()
 
-plt.plot(phase, flux_nullremoved / median, 'ro', markersize=1)
-plt.plot(phase_cleaned, FLUX_cleaned / median, 'ko', markersize=1)
+#plt.plot(phase, flux_nullremoved / median, 'ro', markersize=1)
+#plt.plot(phase_cleaned, FLUX_cleaned / median, 'ko', markersize=1)
 
-plt.xlabel('Phase', **axis_font)
-plt.gca().set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
-plt.ylabel('Relative Flux', **axis_font)
-
-
-plt.show()
+#plt.xlabel('Phase', **axis_font)
+#plt.gca().set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
+#plt.ylabel('Relative Flux', **axis_font)
 
 
+#plt.show()
+
+ 
 
 #Plot data
 fig = plt.figure()
+if pipeline == 'spoc':
+	#Top Subplot: Raw SAP Flux
+	ax1 = fig.add_subplot(311)
+	ax1.plot(time, raw_flux, 'ko', markersize=1.5)
+	ax1.set_ylabel('Raw SAP Flux [e$^-$ / s]', **axis_font)
+	ax1.set_xlabel('Time [BJD - 2457000]', **axis_font) 
+	ax1.set_title('TOI: {} ;  TIC ID: {} ;  Period: {} days'.format(TOI, TIC_ID, period), **axis_font)
 
-#Top subplot: Unfolded LC
-ax1 = fig.add_subplot(211)
-ax1.plot(time_cleaned, FLUX_cleaned / median, 'ko', markersize='1.5')
+
+	#Middle subplot: Unfolded LC
+	ax2 = fig.add_subplot(312)
+	ax2.plot(time_cleaned, FLUX_cleaned / median, 'ko', markersize='1.5')
+	ax2.set_ylabel('Relative Flux', **axis_font)
+	ax2.set_xlabel('Time [BJD - 2457000]', **axis_font)
+
+	#Bottom subplot: Folded LC
+	ax3 = fig.add_subplot(313)
+
+	ax3.plot(phase_cleaned, FLUX_cleaned / median, 'bo', markersize='1.5')
+	ax3.set_ylabel('Relative Flux', **axis_font)
+#	ax3.set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
+	ax3.set_xlabel('Phase', **axis_font)
+
 if pipeline == 'qlp':
-	ax1.plot(time_bad, FLUX_bad / median, 'ro', markersize='1.5')
-ax1.set_ylabel('Relative Flux', **axis_font)
+	
+	#Top subplot: Unfolded LC
+	ax1 = fig.add_subplot(211)
+	ax1.plot(time_cleaned, FLUX_cleaned / median, 'ko', markersize='1.5')
+	ax1.set_ylabel('Relative Flux', **axis_font)
+	ax1.set_xlabel('Time [BJD - 2457000]', **axis_font)
+	ax1.set_title('TOI: {} ;  TIC ID: {} ;  Period: {} days'.format(TOI, TIC_ID, period), **axis_font)
 
-ax1.set_title('TOI: {} ;  TIC ID: {} ;  Period: {} days'.format(TOI, TIC_ID, period), **axis_font)
-ax1.set_xlabel('Time [BJD - 2457000]', **axis_font)
+	#Bottom subplot: Folded LC
+	ax2 = fig.add_subplot(212)
 
-#Bottom subplot: Folded LC
-ax2 = fig.add_subplot(212)
-
-ax2.plot(phase_cleaned, FLUX_cleaned / median, 'bo', markersize='1.5')
-ax2.set_ylabel('Relative Flux', **axis_font)
-ax2.set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
-ax2.set_xlabel('Phase', **axis_font)
+	ax2.plot(phase_cleaned, FLUX_cleaned / median, 'bo', markersize='1.5')
+	ax2.set_ylabel('Relative Flux', **axis_font)
+	ax2.set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
+	ax2.set_xlabel('Phase', **axis_font)
 
 plt.show()
 
