@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from astropy.io import fits
 import sys
 import pandas
+import eds_phd_module as epm
 
 #Load command line arguments
 file_name = sys.argv[1]               		#name of FITS file containing LC data
@@ -93,20 +94,11 @@ time_cleaned = np.delete(time_nullremoved, outlier_indices)
 
 axis_font = {'fontname':'DejaVu Sans', 'size':'20'}
 
-#Test plot
-#plt.figure()
+t = np.linspace(-0.25, 0.75, 10000)
+rp = 0.1
+a = 15.
+flux_model = epm.light_curve_model(t, rp, a)
 
-#plt.plot(phase, flux_nullremoved / median, 'ro', markersize=1)
-#plt.plot(phase_cleaned, FLUX_cleaned / median, 'ko', markersize=1)
-
-#plt.xlabel('Phase', **axis_font)
-#plt.gca().set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
-#plt.ylabel('Relative Flux', **axis_font)
-
-
-#plt.show()
-
- 
 
 #Plot data
 fig = plt.figure()
@@ -129,8 +121,9 @@ if pipeline == 'spoc':
 	ax3 = fig.add_subplot(313)
 
 	ax3.plot(phase_cleaned, FLUX_cleaned / median, 'bo', markersize='1.5')
+	ax3.plot(t, flux_model, 'r-')
 	ax3.set_ylabel('Relative Flux', **axis_font)
-#	ax3.set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
+	ax3.set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
 	ax3.set_xlabel('Phase', **axis_font)
 
 if pipeline == 'qlp':
@@ -146,6 +139,7 @@ if pipeline == 'qlp':
 	ax2 = fig.add_subplot(212)
 
 	ax2.plot(phase_cleaned, FLUX_cleaned / median, 'bo', markersize='1.5')
+	ax2.plot(t, flux_model, 'r-')
 	ax2.set_ylabel('Relative Flux', **axis_font)
 	ax2.set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
 	ax2.set_xlabel('Phase', **axis_font)
