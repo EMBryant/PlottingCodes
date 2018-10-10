@@ -59,28 +59,16 @@ null_indices = np.where(np.isnan(time_flagremoved))
 time_nullremoved = np.delete(time_flagremoved, null_indices)
 flux_nullremoved = np.delete(flux_flagremoved, null_indices)
 
-phase = np.zeros_like(time_nullremoved)					#Empty array to hold phase values
-
-#Perform 'Phase Fold'
-for i in range(len(phase)):
-	phase[i] = (time_nullremoved[i] - epoch) / period  -  np.int((time_nullremoved[i] - epoch) / period) 
-	
-	if phase[i] < 0:
-		phase[i] = phase[i] + 1
-		
-	if phase[i] > 0.75:
-		phase[i] = phase[i] - 1	
-
-phase_days = phase * period								#two additional phase arrays, one in units of days, the other hours
-phase_hours = phase_days * 24
+#Perform a phase fold
+phase, phase_days = epm.phase_fold(time_nullremoved, epoch, period, 0.75)
 
 #Now we want to mask out the transit points, to do statistices on the rest of the LC
-transit_indices = np.where(np.abs(phase_hours) <= T_dur / 2)	#Array indices of all phase/flux values during the transit
-FLUX_OOT = np.delete(flux_nullremoved, transit_indices)			#"Out Of Transit" flux values
-phase_OOT = np.delete(phase_days, transit_indices)				#"Out Of Transit" phase values [units of days]
+transit_indices = np.where(np.abs(phase_days) <= T_dur / (2 * 24))	#Array indices of all phase/flux values during the transit
+FLUX_OOT = np.delete(flux_nullremoved, transit_indices)				#"Out Of Transit" flux values
+phase_OOT = np.delete(phase_days, transit_indices)					#"Out Of Transit" phase values [units of days]
 
-sigma = np.std(FLUX_OOT)										#Standard deviation of out-of-transit flux values
-median = np.median(FLUX_OOT)									#median of all out-of-transit flux values
+sigma = np.std(FLUX_OOT)											#Standard deviation of out-of-transit flux values
+median = np.median(FLUX_OOT)										#median of all out-of-transit flux values
 
 check_indices = np.where(np.abs(flux_nullremoved - median) > 5*sigma)     #Indices of all flux values > +5sigma from median - includes points during transits!
 outlier_indices = np.array([])
@@ -92,15 +80,18 @@ phase_cleaned = np.delete(phase, outlier_indices)									#Remove all 5sigma poi
 FLUX_cleaned = np.delete(flux_nullremoved, outlier_indices)
 time_cleaned = np.delete(time_nullremoved, outlier_indices)
 
-axis_font = {'fontname':'DejaVu Sans', 'size':'20'}
 
+#Calculate the model Light Curve
 t = np.linspace(-0.25, 0.75, 10000)
-rp = 0.1
-a = 15.
+rp = 0.1105
+a = 23.01
 flux_model = epm.light_curve_model(t, rp, a)
 
 
 #Plot data
+
+axis_font = {'fontname':'DejaVu Sans', 'size':'20'}
+
 fig = plt.figure()
 if pipeline == 'spoc':
 	#Top Subplot: Raw SAP Flux

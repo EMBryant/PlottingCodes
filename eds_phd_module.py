@@ -5,6 +5,37 @@ import batman
 import numpy as np
 from matplotlib import pyplot as plt
 
+def phase_fold(time, epoch, period, max_phase):
+	'''Function to convert a given set of times to phases, based off of a zero phase time and a period.
+	
+		INPUTS:
+			time:					numpy array containing the time values to be phase folded [days]
+			epoch:					the time at which to define phase = 0.0 [days]
+			period:					time period over which to perform the phase fold [days]
+			max_phase:				max value of phase to have in the output array
+			
+		OUTPUTS:
+			phase:					numpy array of same dimensions as 'time' containing the calculated phase values
+			phase_days:				same as 'phase' but in units of days'''
+		
+	phase = np.zeros_like(time)					#Empty array to hold phase values
+
+	#Perform 'Phase Fold'
+	for i in range(len(phase)):
+		phase[i] = (time[i] - epoch) / period  -  np.int((time[i] - epoch) / period)	#populates 'phase' array with time values converted to phases
+			
+		if phase[i] < 0:																#takes any phases initially < 0 - from time points < first epoch - and makes positive	
+			phase[i] = phase[i] + 1
+		
+		if phase[i] > max_phase:														#puts all phases in range (max_phase - 1) <= phase <= max_phase. This makes plots look slightly nicer
+			phase[i] = phase[i] - 1	
+
+	phase_days = phase * period						#additional output phase array in units of days
+
+	return phase, phase_days
+	
+	
+
 def light_curve_model(t, rp, a, t0 = 0., per = 1., inc = 90., ecc = 0., w = 90., limb_dark = "uniform", u = []):
 	'''Python Function to use the batman package to produce a model lightcurve using the following input parameters:
 			t: 						numpy array containing the time values at which to calculate the model LC
