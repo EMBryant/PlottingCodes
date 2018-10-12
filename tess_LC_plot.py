@@ -42,6 +42,7 @@ time = DATA_WHOLE['TIME']			  		#Time [BJD - 2457000]
 
 if pipeline == 'spoc':
 	FLUX = DATA_WHOLE['PDCSAP_FLUX']  		#PDC corrected flux from target star
+	FLUX_ERR = DATA_WHOLE['PDCSAP_FLUX_ERR']#Error in PDC corrected flux
 	raw_flux = DATA_WHOLE['SAP_FLUX']		#Simple Aperture Photometry flux from target star
 if pipeline == 'qlp':
 	FLUX = DATA_WHOLE['SAP_FLUX']
@@ -51,6 +52,7 @@ flags = DATA_WHOLE['QUALITY']
 flag_indices = np.where(flags > 0)
 
 flux_flagremoved = np.delete(FLUX, flag_indices)
+fluxerr_flagremoved = np.delete(FLUX_ERR, flag_indices)
 time_flagremoved = np.delete(time, flag_indices)
 
 
@@ -58,6 +60,7 @@ time_flagremoved = np.delete(time, flag_indices)
 null_indices = np.where(np.isnan(time_flagremoved))
 time_nullremoved = np.delete(time_flagremoved, null_indices)
 flux_nullremoved = np.delete(flux_flagremoved, null_indices)
+fluxerr_nullremoved = np.delete(fluxerr_flagremoved, null_indices)
 
 #Perform a phase fold
 phase, phase_days = epm.phase_fold(time_nullremoved, epoch, period, 0.75)
@@ -78,14 +81,15 @@ for i in range(len(check_indices[0])):
 
 phase_cleaned = np.delete(phase, outlier_indices)									#Remove all 5sigma points from phase, flux, and time
 FLUX_cleaned = np.delete(flux_nullremoved, outlier_indices)
+fluxerr_cleaned = np.delete(fluxerr_nullremoved, outlier_indices)
 time_cleaned = np.delete(time_nullremoved, outlier_indices)
 
 
 #Calculate the model Light Curve
-t = np.linspace(-0.25, 0.75, 10000)
+phase_ordered = np.sort(phase_cleaned)
 rp = 0.1105
 a = 23.01
-flux_model = epm.light_curve_model(t, rp, a)
+flux_model = epm.light_curve_model(phase_ordered, rp, a)
 
 
 #Plot data
@@ -112,7 +116,7 @@ if pipeline == 'spoc':
 	ax3 = fig.add_subplot(313)
 
 	ax3.plot(phase_cleaned, FLUX_cleaned / median, 'bo', markersize='1.5')
-	ax3.plot(t, flux_model, 'r-')
+	ax3.plot(phase_ordered, flux_model, 'r-')
 	ax3.set_ylabel('Relative Flux', **axis_font)
 	ax3.set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
 	ax3.set_xlabel('Phase', **axis_font)

@@ -4,6 +4,7 @@ from __future__ import division
 import batman
 import numpy as np
 from matplotlib import pyplot as plt
+from scipy.optimize import minimize
 
 def phase_fold(time, epoch, period, max_phase):
 	'''Function to convert a given set of times to phases, based off of a zero phase time and a period.
@@ -70,3 +71,59 @@ def light_curve_model(t, rp, a, t0 = 0., per = 1., inc = 90., ecc = 0., w = 90.,
 	flux_model = m.light_curve(params)				#Calculates the light curve flux
 	
 	return flux_model
+	
+	
+def light_curve_chi_squared_calc(params_initial, t, FLUX, FLUX_ERR):
+	'''Python Function to calculate the chi_squared value for a given model light curve found using the batman package given the initial parameter inputs:
+	
+		INPUTS:
+			params_initial:			numpy array containing initial parameter guesses
+			t: 						numpy array containing the time values at which to calculate the model LC and test the parameters
+			FLUX:					numpy array containing the flux data value at each point in 't'
+			FLUX_ERR:				numpy array containing the errors in each value in 'FLUX'
+						
+		NOTE: Units of t, t0, and per are not set to be a specific unit but must all be consistent
+		
+		OUTPUT:
+			chi_2 :		a chi squared values for the parameters'''
+	
+	params = batman.TransitParams()					#a batman instance containing all the input parameters
+	params.t0 = 0.									#time of the transit centre
+	params.per = 1.									#orbital period
+	params.rp = params_initial[0]					#radius of the planet, in units of stellar radii
+	params.a = params_initial[1]					#semi-major axis of the planet's orbit, in units of stellar radii
+	params.inc = 90.					#orbital inclination [degrees]
+	params.ecc = 0.					#orbital eccentricity
+	params.w = 90.					#longitude of periastron [degrees]
+	params.u = []									#limb darkening coefficients
+	params.limb_dark = "uniform"					#limb darkening mechanism 
+			
+	m = batman.TransitModel(params, t)				#Initialises the transit model
+	flux_model_initial = m.light_curve(params)		#Calculates the light curve flux
+	
+	chis_2 = np.zeros_like(t)
+	for i in range(len(t)):
+		chis_2[i] = (FLUX[i] - flux_model_initial[i])**2 / FLUX_ERR[i]**2
+	
+	chi_2 = np.sum(chis_2) / (len(chis_2) - 1)
+	
+	return chi_2
+
+def light_curve_parameters_solve(params_initial):
+	'''Function to find the best fit parameters to describe a light curve, given an initial set of parameters:
+	
+			INPUTS:
+				params_initial:			a batman.TransitParams instance containing initial guess parameter set
+			
+			OUTPUTS:
+				params_best:			a batman.TransitParams instance containing the best fit parameter set
+				chi_squared_best:		a chi squared value for the best fit parameters '''
+				
+	
+def flag_check(flag_value):
+		
+	
+	
+	
+	
+	
