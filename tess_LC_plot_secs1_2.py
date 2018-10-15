@@ -13,17 +13,18 @@ import rogues
 
 #Load command line arguments
 file_name = sys.argv[1]               		#name of FITS file containing LC data
-TIC = float(sys.argv[2])					#TOI ID of the object
+TOI = float(sys.argv[2])					#TOI ID of the object
+file_name2 = sys.argv[3]
 
-df = pandas.read_csv('../TESS/TOIs_Sec1_20180905.csv', index_col='tic_id')		#.csv file containing info on parameters (period, epoch, ID, etc.) of all TOIs
+df = pandas.read_csv('../TESS/TOIs_Sec1_20180905.csv', index_col='toi_id')		#.csv file containing info on parameters (period, epoch, ID, etc.) of all TOIs
 
 
-epoch = df.loc[TIC, 'Epoc'] 		      	#Time of first transit centre [BJD - 2457000]
-period = df.loc[TIC, 'Period']			  	#Orbital Period [days]
-T_dur = df.loc[TIC, 'Duration']				#Transit duration [hours]
-pipeline = df.loc[TIC, 'src']				#Pipeline used to reduce data - so that can call correct columns
-TOI = df.loc[TIC, 'toi_id']              #TIC ID for the object - used for plot title
-comments = df.loc[TIC, 'Comment']			#Any existing comments on the object
+epoch = df.loc[TOI, 'Epoc'] 		      	#Time of first transit centre [BJD - 2457000]
+period = df.loc[TOI, 'Period']			  	#Orbital Period [days]
+T_dur = df.loc[TOI, 'Duration']				#Transit duration [hours]
+pipeline = df.loc[TOI, 'src']				#Pipeline used to reduce data - so that can call correct columns
+TIC = df.loc[TOI, 'tic_id']              #TIC ID for the object - used for plot title
+comments = df.loc[TOI, 'Comment']			#Any existing comments on the object
 
 print "Epoch of first transit is {} [BJD - 2457000]".format(epoch)
 print "Orbital period is {} days".format(period)
@@ -36,19 +37,27 @@ hdul = fits.open(file_name)           		#Read in FITS file
 hdr = hdul[0].header                  		#Primary FITS header
 DATA_WHOLE = hdul[1].data             		#Extracts whole data
 
+hdul2 = fits.open(file_name2)
+data2 = hdul2[1].data
+time2 = data2['TIME']
+flux_raw2 = data2['SAP_FLUX']
+flux2 = data2['PDCSAP_FLUX']
+flux_err2 = data2['PDCSAP_FLUX_ERR']
+flags2 = data2['QUALITY']
+
 #Extract desired columns
-time = DATA_WHOLE['TIME']			  		#Time [BJD - 2457000]
+time = np.append(DATA_WHOLE['TIME'], time2)			  		#Time [BJD - 2457000]
 #time_corr = DATA_WHOLE['TIMECORR']    		#Time correction: time - time_corr gives light arrival time at spacecraft
 
 if pipeline == 'spoc':
-	FLUX = DATA_WHOLE['PDCSAP_FLUX']  		#PDC corrected flux from target star
-	FLUX_ERR = DATA_WHOLE['PDCSAP_FLUX_ERR']#Error in PDC corrected flux
-	raw_flux = DATA_WHOLE['SAP_FLUX']		#Simple Aperture Photometry flux from target star
+	FLUX = np.append(DATA_WHOLE['PDCSAP_FLUX'], flux2) 		#PDC corrected flux from target star
+	FLUX_ERR = np.append(DATA_WHOLE['PDCSAP_FLUX_ERR'], flux_err2) #Error in PDC corrected flux
+	raw_flux = np.append(DATA_WHOLE['SAP_FLUX'], flux_raw2)		#Simple Aperture Photometry flux from target star
 if pipeline == 'qlp':
 	FLUX = DATA_WHOLE['SAP_FLUX']
 
 #Load Quality flags in to remove flagged data points
-flags = DATA_WHOLE['QUALITY']
+flags = np.append(DATA_WHOLE['QUALITY'], flags2)
 flag_indices = np.where(flags > 0)
 
 flux_flagremoved = np.delete(FLUX, flag_indices)

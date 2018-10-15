@@ -120,7 +120,12 @@ def light_curve_parameters_solve(params_initial):
 				chi_squared_best:		a chi squared value for the best fit parameters '''
 				
 	
-def flag_check(flag_value):
+def TIC_byID(ID):
+	
+	from astroquery.mast import Catalogs
+	
+	catTable = Catalogs.query_criteria(ID = ID, catalog="Tic")
+	return catTable
 		
 	
 	
