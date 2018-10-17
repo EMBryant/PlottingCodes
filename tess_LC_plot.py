@@ -9,6 +9,7 @@ import pandas
 import argparse
 from matplotlib.backends.backend_pdf import PdfPages
 from astropy.io import fits
+from lightkurve import TessLightCurve
 	
 def TIC_byID(ID):
 	
@@ -189,11 +190,15 @@ if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	parser.add_argument('-fn', '--filename', type=str, nargs='*')
 	parser.add_argument('-s', '--save', action='store_true')
+	parser.add_argument('-lk', '--lightkurve', action='store_true')
+	parser.add_argument('-wl', '--window_length', type=int)
 	
 	args = parser.parse_args()
 	
 	filenames = args.filename
 	save = args.save
+	lightkurve = args.lightkurve
+	windowlength = args.window_length
 	
 	axis_font = {'fontname':'DejaVu Sans', 'size':'30'}
 	df = pandas.read_csv('/home/astro/phrvdf/tess_data_alerts/TOIs_20181016.csv', index_col='tic_id')		#.csv file containing info on parameters (period, epoch, ID, etc.) of all TOIs
@@ -226,7 +231,14 @@ if __name__ == "__main__":
 				print "Existing comments on this object are: {}".format(comments)
 						
 				time, flux, fluxerr, time_whole, raw_flux = tess_LC_dataload_spoc(filenames[i])
-			
+				
+				if lightkurve == True:
+					lc = TessLightCurve(time, flux)
+					flat_lc = lc.flatten(window_length = windowlength)
+					
+					time = flat_lc.time
+					flux = flat_lc.flux
+				
 				phase, phase_days = phase_fold(time, epoch, period)
 			
 				flux_normalised = normalise_LC(flux, phase, period, T_dur)
