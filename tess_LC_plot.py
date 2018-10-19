@@ -150,7 +150,7 @@ def plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag,
 	
 	plt.tight_layout()
 	
-	if save == True:
+	if save:
 		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc.png'.format(TOI, TIC))
 		plt.close()
 	
@@ -179,7 +179,7 @@ def plot_LC_qlp(time, phase, flux, TOI, TIC, period, Tmag, Rs, save=False):
 				
 	plt.tight_layout()
 	
-	if save == True:
+	if save:
 		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc.png'.format(TOI, TIC))
 	
 	else:

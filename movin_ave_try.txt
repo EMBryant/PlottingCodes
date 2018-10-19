@@ -1,0 +1,96 @@
+ for i in range(len(flux)):
+...     if i < n:
+...             ave_flux[i] = np.mean(flux[:2*i+1])
+...     elif i > length - n:
+...             set = length-i
+...             ave_flux[i] = np.mean(flux[-2*set - 1:])
+...     else:
+...             ave_flux[i] = np.mean(flux[i-n:i+n])
+... 
+Traceback (most recent call last):
+  File "<stdin>", line 3, in <module>
+TypeError: 'numpy.float32' object does not support item assignment
+>>> for i in range(len(flux)):
+...     if i < n:
+...             index = 2*i + 1
+...             ave_flux[i] = np.mean(flux[:index])
+... 
+Traceback (most recent call last):
+  File "<stdin>", line 4, in <module>
+TypeError: 'numpy.float32' object does not support item assignment
+>>> for i in range(len(flux)):
+...     if i < n:
+...             ave_flux[i] = np.mean(flux[:np.int(2*i+1)])
+...     elif i > length - n:
+...             set = length-i
+...             ave_flux[i] = np.mean(flux[np.int(-2*set - 1):])
+...     else:
+...             ave_flux[i] = np.mean(flux[i-n:i+n])
+... 
+Traceback (most recent call last):
+  File "<stdin>", line 3, in <module>
+TypeError: 'numpy.float32' object does not support item assignment
+>>> ave_flux
+1675.9309
+>>> ave_flux = np.zeros_like(flux)
+>>> for i in range(len(flux)):
+...     if i < n:
+...             ave_flux[i] = np.mean(flux[:np.int(2*i+1)])
+...     elif i > length - n:
+...             ave_flux[i] = np.mean(flux[np.int(-2*set - 1):])
+...     else:
+...             ave_flux[i] = np.mean(flux[i-n:i+n])
+... 
+>>> plt.plot(time, flux, 'ko')
+[<matplotlib.lines.Line2D object at 0x7f4f384c5fd0>]
+>>> plt.plot(time, ave_flux, 'r--')
+[<matplotlib.lines.Line2D object at 0x7f4f48e70cd0>]
+>>> plt.show()
+>>> plt.plot(time, flux-ave_flux, 'ko')
+[<matplotlib.lines.Line2D object at 0x7f4f38248710>]
+>>> plt.show()
+>>> med = np.median(flux)
+>>> med
+1685.0159
+>>> flux2 = flux
+>>> flux = flux2/med
+>>> flux
+array([0.9910088 , 0.9914702 , 0.99167186, ..., 1.0131632 , 1.0186517 ,
+       1.0197079 ], dtype=float32)
+>>> for i in range(len(flux)):
+...     if i < n:
+...             ave_flux[i] = np.mean(flux[:np.int(2*i+1)])
+...     elif i > length - n:
+...             ave_flux[i] = np.mean(flux[np.int(-2*set - 1):])
+...     else:
+...             ave_flux[i] = np.mean(flux[i-n:i+n])
+... 
+>>> plt.plot(time, flux-ave_flux, 'ko')
+[<matplotlib.lines.Line2D object at 0x7f4f381ce5d0>]
+>>> plt.show()
+>>> plt.plot(time, flux)
+[<matplotlib.lines.Line2D object at 0x7f4f3815a350>]
+>>> plt.show()
+>>> N
+905
+>>> N = 1201
+>>> n = np.int((N+1)/2)
+>>> n
+601
+>>> for i in range(len(flux)):
+...     if i < n:
+...             ave_flux[i] = np.mean(flux[:np.int(2*i+1)])
+...     elif i > length - n:
+...             ave_flux[i] = np.mean(flux[np.int(-2*set - 1):])
+...     else:
+...             ave_flux[i] = np.mean(flux[i-n:i+n])
+... 
+>>> plt.plot(time, flux, 'ko')
+[<matplotlib.lines.Line2D object at 0x7f4f3815a610>]
+>>> plt.plot(time, ave_flux, 'r--')
+[<matplotlib.lines.Line2D object at 0x7f4f3815a990>]
+>>> plt.show()
+>>> plt.plot(time, flux/ave_flux, 'ko')
+[<matplotlib.lines.Line2D object at 0x7f4f385bec50>]
+>>> plt.show()
+>>> 
