@@ -1,6 +1,4 @@
 '''Module containg various useful functions for Ed's exoplanet/TESS/NGTS PhD'''
-
-from __future__ import division
 import batman
 import numpy as np
 from matplotlib import pyplot as plt
@@ -119,7 +117,42 @@ def normalise_LC(flux, phase, period, Tdur):
 	
 	return flux_normalised
 	
-def plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs, save=False):
+def lc_model(t, rp, a, t0 = 0., per = 1., inc = 90., ecc = 0., w = 90., limb_dark = "uniform", u = []):
+	'''Python Function to use the batman package to produce a model lightcurve using the following input parameters:
+			t: 						numpy array containing the time values at which to calculate the model LC
+			rp: 					radius of the planet, in units of stellar radii
+			a						semi-major axis of the planet's orbit, in units of stellar radii
+			t0 = 0.					time of the transit centre
+			per = 1.				orbital period
+			inc = 90.				orbital inclination [degrees]
+			ecc = 0.				orbital eccentricity
+			w = 90. 				longitude of periastron [degrees]
+			limb_dark = "uniform"	limb darkening mechanism 
+			u = []					limb darkening coefficients
+			
+		NOTE: Units of t, t0, and per are not set to be a specific unit but must all be consistent
+		
+		OUTPUT:
+			flux_model :  a numpy array of the same dimensions as t, containing the relative for the model LC at each 
+							time point in t'''
+
+	params = batman.TransitParams()					#a batman instance containing all the input parameters
+	params.t0 = t0									#time of the transit centre
+	params.per = per								#orbital period
+	params.rp = rp									#radius of the planet, in units of stellar radii
+	params.a = a									#semi-major axis of the planet's orbit, in units of stellar radii
+	params.inc = inc								#orbital inclination [degrees]
+	params.ecc = ecc								#orbital eccentricity
+	params.w = w									#longitude of periastron [degrees]
+	params.u = u									#limb darkening coefficients
+	params.limb_dark = limb_dark					#limb darkening mechanism 
+	
+	m = batman.TransitModel(params, t)				#Initialises the transit model
+	flux_model = m.light_curve(params)				#Calculates the light curve flux
+	
+	return flux_model
+	
+def plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs):
 	
 	fig = plt.figure(figsize=(30, 20))
 	
@@ -138,11 +171,11 @@ def plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag,
 	ax2.set_ylabel('Relative Flux', **axis_font)
 	ax2.set_xlabel('Time [BJD - 2457000]', **axis_font)
 	ax2.tick_params(labelsize=20)
+	
 	#Bottom subplot: Folded LC
 	ax3 = fig.add_subplot(313)
 
 	ax3.plot(phase, flux_normalised, 'bo', markersize='1.5')
-	#ax3.plot(phase_ordered, flux_model, 'r-')
 	ax3.set_ylabel('Relative Flux', **axis_font)
 	ax3.set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
 	ax3.tick_params(labelsize=20)
@@ -156,8 +189,47 @@ def plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag,
 	
 	else:
 		plt.show()
+	
+def plot_LC_spoc_model(time, raw_flux, flux_normalised, flux_model, phase, phase_model, TOI, TIC, period, Tmag, Rs):
+	
+	fig = plt.figure(figsize=(30, 20))
+	
+	#Top Subplot: Raw SAP Flux
+	ax1 = fig.add_subplot(311)
+	ax1.plot(time, raw_flux, 'ko', markersize=1.5)
+	ax1.set_ylabel('Raw SAP Flux [e$^-$ / s]', **axis_font)
+	ax1.set_xlabel('Time [BJD - 2457000]', **axis_font) 
+	ax1.tick_params(labelsize=20)
+	ax1.set_title('T = {} ; Rs = {} ;  Period: {} days \n TOI: {} ;  TIC ID: {}'.format(Tmag, Rs, period, TOI, TIC), **axis_font)
 
-def plot_LC_qlp(time, phase, flux, TOI, TIC, period, Tmag, Rs, save=False):
+
+	#Middle subplot: Unfolded LC
+	ax2 = fig.add_subplot(312)
+	ax2.plot(time, flux_normalised, 'ko', markersize='1.5')
+	ax2.set_ylabel('Relative Flux', **axis_font)
+	ax2.set_xlabel('Time [BJD - 2457000]', **axis_font)
+	ax2.tick_params(labelsize=20)
+	
+	#Bottom subplot: Folded LC
+	ax3 = fig.add_subplot(313)
+
+	ax3.plot(phase, flux_normalised, 'bo', markersize='1.5')
+	ax3.plot(phase_model, flux_model, 'r-')
+	ax3.set_ylabel('Relative Flux', **axis_font)
+	ax3.set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
+	ax3.tick_params(labelsize=20)
+	ax3.set_xlabel('Phase', **axis_font)
+	
+	plt.tight_layout()
+	
+	if save:
+		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc_withmodel.png'.format(TOI, TIC))
+		plt.close()
+	
+	else:
+		plt.show()
+
+def plot_LC_qlp(time, phase, flux, TOI, TIC, period, Tmag, Rs):
 	
 	fig = plt.figure(figsize=(30, 20))
 				
@@ -185,6 +257,36 @@ def plot_LC_qlp(time, phase, flux, TOI, TIC, period, Tmag, Rs, save=False):
 	else:
 		plt.show()
 
+
+def plot_LC_qlp_model(time, phase, flux, flux_model, phase_model, TOI, TIC, period, Tmag, Rs):
+	
+	fig = plt.figure(figsize=(30, 20))
+				
+	#Top subplot: Unfolded LC
+	ax1 = fig.add_subplot(211)
+	ax1.plot(time, flux, 'ko', markersize='3')
+	ax1.set_ylabel('Relative Flux', **axis_font)
+	ax1.set_xlabel('Time [BJD - 2457000]', **axis_font)
+	ax1.tick_params(labelsize=20)
+	ax1.set_title('T = {} ; Rs = {} ;  Period: {} days \n TOI: {} ;  TIC ID: {}'.format(Tmag, Rs, period, TOI, TIC), **axis_font)
+
+	#Bottom subplot: Folded LC
+	ax2 = fig.add_subplot(212)
+	ax2.plot(phase, flux, 'bo', markersize='3')
+	ax2.plot(phase_model, flux_model, 'r-')
+	ax2.set_ylabel('Relative Flux', **axis_font)
+	ax2.tick_params(labelsize=20)
+	ax2.set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
+	ax2.set_xlabel('Phase', **axis_font)
+				
+	plt.tight_layout()
+	
+	if save:
+		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc_withmodel.png'.format(TOI, TIC))
+	
+	else:
+		plt.show()
+
 if __name__ == "__main__":
 		
 	parser = argparse.ArgumentParser()
@@ -192,6 +294,7 @@ if __name__ == "__main__":
 	parser.add_argument('-s', '--save', action='store_true')
 	parser.add_argument('-lk', '--lightkurve', action='store_true')
 	parser.add_argument('-wl', '--window_length', type=int)
+	parser.add_argument('-m', '--model', action='store_true')
 	
 	args = parser.parse_args()
 	
@@ -199,6 +302,7 @@ if __name__ == "__main__":
 	save = args.save
 	lightkurve = args.lightkurve
 	windowlength = args.window_length
+	mod = args.model
 	
 	axis_font = {'fontname':'DejaVu Sans', 'size':'30'}
 	df = pandas.read_csv('/home/astro/phrvdf/tess_data_alerts/TOIs_20181016.csv', index_col='tic_id')		#.csv file containing info on parameters (period, epoch, ID, etc.) of all TOIs
@@ -225,10 +329,10 @@ if __name__ == "__main__":
 				TOI = df2.loc['toi_id']            	  	#TIC ID for the object - used for plot title
 				comments = df2.loc['Comment']			#Any existing comments on the object
 			
-				print "Epoch of first transit is {} [BJD - 2457000]".format(epoch)
-				print "Orbital period is {} days".format(period)
-				print "Transit duration is {} hours ({} days)".format(T_dur, T_dur/24.)
-				print "Existing comments on this object are: {}".format(comments)
+				print("Epoch of first transit is {} [BJD - 2457000]".format(epoch))
+				print("Orbital period is {} days".format(period))
+				print("Transit duration is {} hours ({} days)".format(T_dur, T_dur/24.))
+				print("Existing comments on this object are: {}".format(comments))
 						
 				time, flux, fluxerr, time_whole, raw_flux = tess_LC_dataload_spoc(filenames[i])
 				
@@ -238,18 +342,20 @@ if __name__ == "__main__":
 					
 					time = flat_lc.time
 					flux = flat_lc.flux
-				
+					
 				phase, phase_days = phase_fold(time, epoch, period)
 			
 				flux_normalised = normalise_LC(flux, phase, period, T_dur)
 				
-				if save == True:
-					plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs, save=True)
-				
-				elif save == False:
-					plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs, save=False)
+				if mod:
+					phase_sort = np.sort(phase)
+					phase_model = np.array(phase_sort, dtype='float64')
+					flux_model = lc_model()
+					plot_LC_spoc_model(time, raw_flux, flux_normalised, flux_model, phase, phase_model, TOI, TIC, period, Tmag, Rs)
+				else:
+					plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs)
 
-				print TIC, TOI
+				print(TIC, TOI)
 				
 			else:
 				for j in range(len(df2)):
@@ -262,24 +368,26 @@ if __name__ == "__main__":
 					TOI = df3.loc['toi_id']            	  	#TIC ID for the object - used for plot title
 					comments = df3.loc['Comment']			#Any existing comments on the object
 			
-					print "Epoch of first transit is {} [BJD - 2457000]".format(epoch)
-					print "Orbital period is {} days".format(period)
-					print "Transit duration is {} hours ({} days)".format(T_dur, T_dur/24.)
-					print "Existing comments on this object are: {}".format(comments)
-						
+					print("Epoch of first transit is {} [BJD - 2457000]".format(epoch))
+					print("Orbital period is {} days".format(period))
+					print("Transit duration is {} hours ({} days)".format(T_dur, T_dur/24.))
+					print("Existing comments on this object are: {}".format(comments))
+					
 					time, flux, fluxerr, time_whole, raw_flux = tess_LC_dataload_spoc(filenames[i])
 			
 					phase, phase_days = phase_fold(time, epoch, period)
 			
 					flux_normalised = normalise_LC(flux, phase, period, T_dur)
-				
-					if save == True:
-						plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs, save=True)
-				
-					elif save == False:
-						plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs, save=False)
+					
+					if mod:
+						phase_sort = np.sort(phase)
+						phase_model = np.array(phase_sort, dtype='float64')
+						flux_model = lc_model()
+						plot_LC_spoc_model(time, raw_flux, flux_normalised, flux_model, phase, phase_model, TOI, TIC, period, Tmag, Rs)
+					else:
+						plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs)
 
-					print TIC, TOI
+					print(TIC, TOI)
 			
 		elif hdr['ORIGIN'] == 'MIT/QLP':
 			
@@ -299,25 +407,25 @@ if __name__ == "__main__":
 				TOI = df2.loc['toi_id']            	  	#TIC ID for the object - used for plot title
 				comments = df2.loc['Comment']			#Any existing comments on the object
 			
-				print "Epoch of first transit is {} [BJD - 2457000]".format(epoch)
-				print "Orbital period is {} days".format(period)
-				print "Transit duration is {} hours ({} days)".format(T_dur, T_dur/24.)
-				print "Existing comments on this object are: {}".format(comments)
-			
+				print("Epoch of first transit is {} [BJD - 2457000]".format(epoch))
+				print("Orbital period is {} days".format(period))
+				print("Transit duration is {} hours ({} days)".format(T_dur, T_dur/24.))
+				print("Existing comments on this object are: {}".format(comments))
+				
 
 				time, flux = tess_LC_dataload_qlp(filenames[i])
 			
 				phase, phase_days = phase_fold(time, epoch, period)
+								
+				if mod:
+					phase_sort = np.sort(phase)
+					phase_model = np.array(phase_sort, dtype='float64')
+					flux_model = lc_model()
+					plot_LC_qlp_model(time, phase, flux, flux_model, phase_model, TOI, TIC, period, Tmag, Rs)
+				else:
+					plot_LC_qlp(time, phase, flux, TOI, TIC, period, Tmag, Rs)
 				
-				flux_normalised = normalise_LC(flux, phase, period, T_dur)
-				
-				if save == True:
-					plot_LC_qlp(time, phase, flux, TOI, TIC, period, Tmag, Rs, save=True)
-					
-				elif save == False:
-					plot_LC_qlp(time, phase, flux, TOI, TIC, period, Tmag, Rs, save=False)
-				
-				print TIC, TOI
+				print(TIC, TOI)
 		
 			else:
 				for j in range(len(df2)):
@@ -327,29 +435,27 @@ if __name__ == "__main__":
 					epoch = df3.loc['Epoc'] 		      	#Time of first transit centre [BJD - 2457000]
 					period = df3.loc['Period']			  	#Orbital Period [days]
 					T_dur = df3.loc['Duration']				#Transit duration [hours]
-					pipeline = df3.loc['src']				#Pipeline used to reduce data - so that can call correct columns
 					TOI = df3.loc['toi_id']            	  	#TIC ID for the object - used for plot title
 					comments = df3.loc['Comment']			#Any existing comments on the object
 			
-					print "Epoch of first transit is {} [BJD - 2457000]".format(epoch)
-					print "Orbital period is {} days".format(period)
-					print "Transit duration is {} hours ({} days)".format(T_dur, T_dur/24.)
-					print "Pipeline used to process data is {}".format(pipeline)
-					print "Existing comments on this object are: {}".format(comments)
-						
+					print("Epoch of first transit is {} [BJD - 2457000]".format(epoch))
+					print("Orbital period is {} days".format(period))
+					print("Transit duration is {} hours ({} days)".format(T_dur, T_dur/24.))
+					print("Existing comments on this object are: {}".format(comments))
+					
 					time, flux, time_whole, raw_flux = tess_LC_dataload_qlp(filenames[i])
 			
 					phase, phase_days = phase_fold(time, epoch, period)
 			
-					flux_normalised = normalise_LC(flux, phase, period, T_dur)
+					if mod:
+						phase_sort = np.sort(phase)
+						phase_model = np.array(phase_sort, dtype='float64')
+						flux_model = lc_model()
+						plot_LC_qlp_model(time, phase, flux, flux_model, phase_model, TOI, TIC, period, Tmag, Rs)
+					else:
+						plot_LC_qlp(time, phase, flux, TOI, TIC, period, Tmag, Rs)
 				
-					if save == True:
-						plot_LC_qlp(time, phase, flux, TOI, TIC, period, Tmag, Rs, save=True)
-					
-					elif save == False:
-						plot_LC_qlp(time, phase, flux, TOI, TIC, period, Tmag, Rs, save=False)
-				
-					print TIC, TOI
+					print(TIC, TOI)
 					
 				
 
