@@ -5,7 +5,7 @@ import batman
 import numpy as np
 from matplotlib import pyplot as plt
 
-def light_curve_model(t, rp, a, t0 = 0., per = 1., inc = 90., ecc = 0., w = 90., limb_dark = "uniform", u = []):
+def light_curve_model(t, rp, a, t0 = 0., per = 1., inc = 90., ecc = 0., w = 90., limb_dark = "quadratic", u = [0.1, 0.3]):
 	'''Python Function to use the batman package to produce a model lightcurve using the following input parameters:
 			t: 						numpy array containing the time values at which to calculate the model LC
 			rp: 					radius of the planet, in units of stellar radii

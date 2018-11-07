@@ -1,154 +1,231 @@
-'''Code to read in and plot TESS LCs from FITS files
-
-Command line arguments needed: (1) File name; (2) TOI ID'''
-
-#Preliminary imports
-from __future__ import division
+import batman
 import numpy as np
-import matplotlib.pyplot as plt
-from astropy.io import fits
-import sys
+from matplotlib import pyplot as plt
+from scipy.optimize import minimize
 import pandas
-import rogues
+import argparse
+from matplotlib.backends.backend_pdf import PdfPages
+from astropy.io import fits
+from lightkurve import TessLightCurve
+	
+def TIC_byID(ID):
+	
+	from astroquery.mast import Catalogs
+	
+	catTable = Catalogs.query_criteria(ID=ID, catalog="Tic")
+	return catTable
+		
+def tess_LC_dataload_spoc(file_name):
+	'''Loads TESS LC data for a given object and uses quality flags etc. to remove bad points 
+		'''
+	#Load FITS file
+	hdul = fits.open(file_name)           		#Read in FITS file
+	hdr = hdul[0].header                  		#Primary FITS header
+	DATA_WHOLE = hdul[1].data             		#Extracts whole data
 
-#Load command line arguments
-file_name = sys.argv[1]               		#name of FITS file containing LC data
-TOI = float(sys.argv[2])					#TOI ID of the object
-file_name2 = sys.argv[3]
+	#Extract desired columns
+	time = DATA_WHOLE['TIME']			  		#Time [BJD - 2457000]
+	#time_corr = DATA_WHOLE['TIMECORR']    		#Time correction: time - time_corr gives light arrival time at spacecraft
 
-df = pandas.read_csv('../TESS/TOIs_Sec1_20180905.csv', index_col='toi_id')		#.csv file containing info on parameters (period, epoch, ID, etc.) of all TOIs
+	FLUX = DATA_WHOLE['PDCSAP_FLUX']  		#PDC corrected flux from target star
+	FLUX_ERR = DATA_WHOLE['PDCSAP_FLUX_ERR']#Error in PDC corrected flux
+	raw_flux = DATA_WHOLE['SAP_FLUX']		#Simple Aperture Photometry flux from target star
+	
+	#Load Quality flags in to remove flagged data points
+	flags = DATA_WHOLE['QUALITY']
+	flag_indices = np.where(flags > 0)
 
+	flux_flagremoved = np.delete(FLUX, flag_indices)
+	fluxerr_flagremoved = np.delete(FLUX_ERR, flag_indices)
+	time_flagremoved = np.delete(time, flag_indices)
+	raw_flux_flagremoved = np.delete(raw_flux, flag_indices)
 
-epoch = df.loc[TOI, 'Epoc'] 		      	#Time of first transit centre [BJD - 2457000]
-period = df.loc[TOI, 'Period']			  	#Orbital Period [days]
-T_dur = df.loc[TOI, 'Duration']				#Transit duration [hours]
-pipeline = df.loc[TOI, 'src']				#Pipeline used to reduce data - so that can call correct columns
-TIC = df.loc[TOI, 'tic_id']              #TIC ID for the object - used for plot title
-comments = df.loc[TOI, 'Comment']			#Any existing comments on the object
+	#Remove time points during central gap
+	null_indices = np.where(np.isnan(time_flagremoved))
+	time_nullremoved = np.delete(time_flagremoved, null_indices)
+	flux_nullremoved = np.delete(flux_flagremoved, null_indices)
+	fluxerr_nullremoved = np.delete(fluxerr_flagremoved, null_indices)
+	raw_flux_nullremoved = np.delete(raw_flux_flagremoved, null_indices)
+	
+	return time_nullremoved, flux_nullremoved, fluxerr_nullremoved, time, raw_flux_nullremoved
 
-print "Epoch of first transit is {} [BJD - 2457000]".format(epoch)
-print "Orbital period is {} days".format(period)
-print "Transit duration is {} hours ({} days)".format(T_dur, T_dur/24.)
-print "Pipeline used to process data is {}".format(pipeline)
-print "Existing comments on this object are: {}".format(comments)
+def phase_fold(time, epoch, period, max_phase=0.75):
+	'''Function to convert a given set of times to phases, based off of a zero phase time and a period.
+	
+		INPUTS:
+			time:					numpy array containing the time values to be phase folded [days]
+			epoch:					the time at which to define phase = 0.0 [days]
+			period:					time period over which to perform the phase fold [days]
+			max_phase:				max value of phase to have in the output array
+			
+		OUTPUTS:
+			phase:					numpy array of same dimensions as 'time' containing the calculated phase values
+			phase_days:				same as 'phase' but in units of days'''
+		
+	phase = np.zeros_like(time)					#Empty array to hold phase values
 
-#Load FITS file
-hdul = fits.open(file_name)           		#Read in FITS file
-hdr = hdul[0].header                  		#Primary FITS header
-DATA_WHOLE = hdul[1].data             		#Extracts whole data
+	#Perform 'Phase Fold'
+	for i in range(len(phase)):
+		phase[i] = (time[i] - epoch) / period  -  np.int((time[i] - epoch) / period)	#populates 'phase' array with time values converted to phases
+			
+		if phase[i] < 0:																#takes any phases initially < 0 - from time points < first epoch - and makes positive	
+			phase[i] = phase[i] + 1
+		
+		if phase[i] > max_phase:														#puts all phases in range (max_phase - 1) <= phase <= max_phase. This makes plots look slightly nicer
+			phase[i] = phase[i] - 1	
 
-hdul2 = fits.open(file_name2)
-data2 = hdul2[1].data
-time2 = data2['TIME']
-flux_raw2 = data2['SAP_FLUX']
-flux2 = data2['PDCSAP_FLUX']
-flux_err2 = data2['PDCSAP_FLUX_ERR']
-flags2 = data2['QUALITY']
+	phase_days = phase * period						#additional output phase array in units of days
 
-#Extract desired columns
-time = np.append(DATA_WHOLE['TIME'], time2)			  		#Time [BJD - 2457000]
-#time_corr = DATA_WHOLE['TIMECORR']    		#Time correction: time - time_corr gives light arrival time at spacecraft
+	return phase, phase_days
+	
+def normalise_LC(flux, phase, period, Tdur):
 
-if pipeline == 'spoc':
-	FLUX = np.append(DATA_WHOLE['PDCSAP_FLUX'], flux2) 		#PDC corrected flux from target star
-	FLUX_ERR = np.append(DATA_WHOLE['PDCSAP_FLUX_ERR'], flux_err2) #Error in PDC corrected flux
-	raw_flux = np.append(DATA_WHOLE['SAP_FLUX'], flux_raw2)		#Simple Aperture Photometry flux from target star
-if pipeline == 'qlp':
-	FLUX = DATA_WHOLE['SAP_FLUX']
+	#Now we want to mask out the transit points, to do statistices on the rest of the LC
+	transit_indices = np.where(np.abs(phase * period) <= T_dur / (2 * 24))	#Array indices of all phase/flux values during the transit
+	FLUX_OOT = np.delete(flux, transit_indices)				#"Out Of Transit" flux values
 
-#Load Quality flags in to remove flagged data points
-flags = np.append(DATA_WHOLE['QUALITY'], flags2)
-flag_indices = np.where(flags > 0)
+	median = np.median(FLUX_OOT)										#median of all out-of-transit flux values
 
-flux_flagremoved = np.delete(FLUX, flag_indices)
-#fluxerr_flagremoved = np.delete(FLUX_ERR, flag_indices)
-time_flagremoved = np.delete(time, flag_indices)
-
-
-#Remove time points during central gap
-null_indices = np.where(np.isnan(time_flagremoved))
-time_nullremoved = np.delete(time_flagremoved, null_indices)
-flux_nullremoved = np.delete(flux_flagremoved, null_indices)
-#fluxerr_nullremoved = np.delete(fluxerr_flagremoved, null_indices)
-
-#Perform a phase fold
-phase, phase_days = rogues.phase_fold(time_nullremoved, epoch, period, 0.75)
-
-#Now we want to mask out the transit points, to do statistices on the rest of the LC
-transit_indices = np.where(np.abs(phase_days) <= T_dur / (2 * 24))	#Array indices of all phase/flux values during the transit
-FLUX_OOT = np.delete(flux_nullremoved, transit_indices)				#"Out Of Transit" flux values
-phase_OOT = np.delete(phase_days, transit_indices)					#"Out Of Transit" phase values [units of days]
-
-sigma = np.std(FLUX_OOT)											#Standard deviation of out-of-transit flux values
-median = np.median(FLUX_OOT)										#median of all out-of-transit flux values
-
-check_indices = np.where(np.abs(flux_nullremoved - median) > 5*sigma)     #Indices of all flux values > +5sigma from median - includes points during transits!
-outlier_indices = np.array([])
-for i in range(len(check_indices[0])):
-	if len(np.where(transit_indices[0] == check_indices[0][i])[0]) == 0:		  	#ie. if the index corresponds to a point not during a transit
-		outlier_indices = np.append(outlier_indices, check_indices[0][i])		  	#All points > +5sigma from median - NOT including transit points
-
-phase_cleaned = np.delete(phase, outlier_indices)									#Remove all 5sigma points from phase, flux, and time
-FLUX_cleaned = np.delete(flux_nullremoved, outlier_indices)
-#fluxerr_cleaned = np.delete(fluxerr_nullremoved, outlier_indices)
-time_cleaned = np.delete(time_nullremoved, outlier_indices)
-
-
-#Calculate the model Light Curve
-#phase_ordered = np.sort(phase_cleaned)
-#rp = 0.1105
-#a = 23.01
-#flux_model = epm.light_curve_model(phase_ordered, rp, a)
-
-#cat_table = rogues.TIC_byID(TIC)
-#Tmag = cat_table['Tmag']
-#print Tmag
-#Plot data
-
-axis_font = {'fontname':'DejaVu Sans', 'size':'20'}
-
-fig = plt.figure()
-if pipeline == 'spoc':
+	flux_normalised = flux / median
+	
+	return flux_normalised
+	
+def plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs):
+	
+	fig = plt.figure(figsize=(30, 20))
+	
 	#Top Subplot: Raw SAP Flux
 	ax1 = fig.add_subplot(311)
 	ax1.plot(time, raw_flux, 'ko', markersize=1.5)
 	ax1.set_ylabel('Raw SAP Flux [e$^-$ / s]', **axis_font)
 	ax1.set_xlabel('Time [BJD - 2457000]', **axis_font) 
-	ax1.set_title('TOI: {} ;  TIC ID: {} ;  Period: {} days'.format(TOI, TIC, period), **axis_font)
+	ax1.tick_params(labelsize=20)
+	ax1.set_title('T = {} ; Rs = {} ;  Period: {} days \n TOI: {} ;  TIC ID: {} ;  Sector: 1 & 2'.format(Tmag, Rs, period, TOI, TIC), **axis_font)
 
 
 	#Middle subplot: Unfolded LC
 	ax2 = fig.add_subplot(312)
-	ax2.plot(time_cleaned, FLUX_cleaned / median, 'ko', markersize='1.5')
+	ax2.plot(time, flux_normalised, 'ko', markersize='1.5')
 	ax2.set_ylabel('Relative Flux', **axis_font)
 	ax2.set_xlabel('Time [BJD - 2457000]', **axis_font)
-
+	ax2.tick_params(labelsize=20)
+	
 	#Bottom subplot: Folded LC
 	ax3 = fig.add_subplot(313)
 
-	ax3.plot(phase_cleaned, FLUX_cleaned / median, 'bo', markersize='1.5')
-	#ax3.plot(phase_ordered, flux_model, 'r-')
+	ax3.plot(phase, flux_normalised, 'bo', markersize='1.5')
 	ax3.set_ylabel('Relative Flux', **axis_font)
 	ax3.set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
+	ax3.tick_params(labelsize=20)
 	ax3.set_xlabel('Phase', **axis_font)
-
-if pipeline == 'qlp':
 	
-	#Top subplot: Unfolded LC
-	ax1 = fig.add_subplot(211)
-	ax1.plot(time_cleaned, FLUX_cleaned / median, 'ko', markersize='1.5')
-	ax1.set_ylabel('Relative Flux', **axis_font)
-	ax1.set_xlabel('Time [BJD - 2457000]', **axis_font)
-	ax1.set_title('TOI: {} ;  TIC ID: {} ;  Period: {} days'.format(TOI, TIC, period), **axis_font)
+	plt.tight_layout()
+	
+	if save:
+		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc_sector1&2_doubleP.png'.format(TOI, TIC))
+		plt.close()
+	
+	else:
+		plt.show()
+		
+if __name__ == "__main__":
+		
+	parser = argparse.ArgumentParser()
+	parser.add_argument('-f1', '--file1', type=str)
+	parser.add_argument('-f2', '--file2', type=str)
+	parser.add_argument('-s', '--save', action='store_true')
+	
+	args = parser.parse_args()
+	
+	f1 = args.file1
+	f2 = args.file2
+	save = args.save
+	
+	axis_font = {'fontname':'DejaVu Sans', 'size':'30'}
+	df = pandas.read_csv('/home/astro/phrvdf/tess_data_alerts/TOIs_20181016.csv', index_col='tic_id')		#.csv file containing info on parameters (period, epoch, ID, etc.) of all TOIs
+	length = len(df.iloc[0])
 
-	#Bottom subplot: Folded LC
-	ax2 = fig.add_subplot(212)
+		
+	hdul1 = fits.open(f1)
+	hdr1 = hdul1[0].header
+	
+	hdul2 = fits.open(f2)
+	hdr2 = hdul2[0].header
+		
+	if hdr1['ORIGIN'] == 'NASA/Ames':
+		
+		TIC = hdr1['TICID']							#Loads TIC ID number from the fits header
+		Tmag = hdr1['TESSMAG']						#Loads TESS mag from fits header
+		Rs = hdr1['RADIUS']							#Loads stellar radius [solar radius] from fits header
+			
+		df2 = df.loc[TIC]
+			
+		if len(df2) == length:
+				
+			epoch = df2.loc['Epoc'] 		      	#Time of first transit centre [BJD - 2457000]
+			period = 2*df2.loc['Period']			  	#Orbital Period [days]
+			T_dur = df2.loc['Duration']				#Transit duration [hours]
+			TOI = df2.loc['toi_id']            	  	#TIC ID for the object - used for plot title
+			comments = df2.loc['Comment']			#Any existing comments on the object
+			
+			print("Epoch of first transit is {} [BJD - 2457000]".format(epoch))
+			print("Orbital period is {} days".format(period))
+			print("Transit duration is {} hours ({} days)".format(T_dur, T_dur/24.))
+			print("Existing comments on this object are: {}".format(comments))
+						
+			time1, flux1, fluxerr1, time_whole1, raw_flux1 = tess_LC_dataload_spoc(f1)				
+			phase1, phase_days1 = phase_fold(time1, epoch, period)
+			flux_normalised1 = normalise_LC(flux1, phase1, period, T_dur)
+			
+			time2, flux2, fluxerr2, time_whole2, raw_flux2 = tess_LC_dataload_spoc(f2)				
+			phase2, phase_days2 = phase_fold(time2, epoch, period)
+			flux_normalised2 = normalise_LC(flux2, phase2, period, T_dur)
+			
+			time = np.append(time1, time2)
+			raw_flux = np.append(raw_flux1, raw_flux2)
+			flux_normalised = np.append(flux_normalised1, flux_normalised2)
+			phase = np.append(phase1, phase2)
+				
+			plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs)
 
-	ax2.plot(phase_cleaned, FLUX_cleaned / median, 'bo', markersize='1.5')
-#	ax2.plot(t, flux_model, 'r-')
-	ax2.set_ylabel('Relative Flux', **axis_font)
-	ax2.set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
-	ax2.set_xlabel('Phase', **axis_font)
+			print(TIC, TOI)
+				
+		else:
+			for j in range(len(df2)):
+					
+				df3 = df2.iloc[j]
+					
+				epoch = df3.loc['Epoc'] 		      	#Time of first transit centre [BJD - 2457000]
+				period = df3.loc['Period']			  	#Orbital Period [days]
+				T_dur = df3.loc['Duration']				#Transit duration [hours]
+				TOI = df3.loc['toi_id']            	  	#TIC ID for the object - used for plot title
+				comments = df3.loc['Comment']			#Any existing comments on the object
+			
+				print("Epoch of first transit is {} [BJD - 2457000]".format(epoch))
+				print("Orbital period is {} days".format(period))
+				print("Transit duration is {} hours ({} days)".format(T_dur, T_dur/24.))
+				print("Existing comments on this object are: {}".format(comments))
+					
+				time1, flux1, fluxerr1, time_whole1, raw_flux1 = tess_LC_dataload_spoc(f1)				
+				phase1, phase_days1 = phase_fold(time1, epoch, period)
+				flux_normalised1 = normalise_LC(flux1, phase1, period, T_dur)
+			
+				time2, flux2, fluxerr2, time_whole2, raw_flux2 = tess_LC_dataload_spoc(f2)				
+				phase2, phase_days2 = phase_fold(time2, epoch, period)
+				flux_normalised2 = normalise_LC(flux2, phase2, period, T_dur)
+			
+				time = np.append(time1, time2)
+				raw_flux = np.append(raw_flux1, raw_flux2)
+				flux_normalised = np.append(flux_normalised1, flux_normalised2)
+				phase = np.append(phase1, phase2)
+				
+				plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs)
+				
+				print(TIC, TOI)
+			
 
-plt.show()
+
+
+
+
 

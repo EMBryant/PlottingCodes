@@ -1,8 +1,9 @@
 '''Module containg various useful functions for Ed's exoplanet/TESS/NGTS PhD'''
-import batman
+import batman as bm
 import numpy as np
 from matplotlib import pyplot as plt
-from scipy.optimize import minimize
+from scipy.optimize import minimize as mini
+from scipy.stats import sem
 import pandas
 import argparse
 from matplotlib.backends.backend_pdf import PdfPages
@@ -105,7 +106,7 @@ def phase_fold(time, epoch, period, max_phase=0.75):
 
 	return phase, phase_days
 	
-def normalise_LC(flux, phase, period, Tdur):
+def normalise_LC(flux, err, phase, period, Tdur):
 
 	#Now we want to mask out the transit points, to do statistices on the rest of the LC
 	transit_indices = np.where(np.abs(phase * period) <= T_dur / (2 * 24))	#Array indices of all phase/flux values during the transit
@@ -114,10 +115,11 @@ def normalise_LC(flux, phase, period, Tdur):
 	median = np.median(FLUX_OOT)										#median of all out-of-transit flux values
 
 	flux_normalised = flux / median
+	err_normalised = err / median
 	
-	return flux_normalised
+	return flux_normalised, err_normalised
 	
-def lc_model(t, rp, a, t0 = 0., per = 1., inc = 90., ecc = 0., w = 90., limb_dark = "uniform", u = []):
+def lc_model(t, rp, a, t0 = 0., per = 1., inc = 90., ecc = 0., w = 90., limb_dark = "quadratic", u = [0.1, 0.3]):
 	'''Python Function to use the batman package to produce a model lightcurve using the following input parameters:
 			t: 						numpy array containing the time values at which to calculate the model LC
 			rp: 					radius of the planet, in units of stellar radii
@@ -136,7 +138,7 @@ def lc_model(t, rp, a, t0 = 0., per = 1., inc = 90., ecc = 0., w = 90., limb_dar
 			flux_model :  a numpy array of the same dimensions as t, containing the relative for the model LC at each 
 							time point in t'''
 
-	params = batman.TransitParams()					#a batman instance containing all the input parameters
+	params = bm.TransitParams()						#a batman instance containing all the input parameters
 	params.t0 = t0									#time of the transit centre
 	params.per = per								#orbital period
 	params.rp = rp									#radius of the planet, in units of stellar radii
@@ -147,12 +149,107 @@ def lc_model(t, rp, a, t0 = 0., per = 1., inc = 90., ecc = 0., w = 90., limb_dar
 	params.u = u									#limb darkening coefficients
 	params.limb_dark = limb_dark					#limb darkening mechanism 
 	
-	m = batman.TransitModel(params, t)				#Initialises the transit model
+	m = bm.TransitModel(params, t)					#Initialises the transit model
 	flux_model = m.light_curve(params)				#Calculates the light curve flux
 	
 	return flux_model
 	
-def plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs):
+def fit_phasefolded(X0, phase, flux, err):
+	
+#	t0 = X0[0]
+	rp = X0[0]
+	a = X0[1]
+	inc = X0[2]
+	ecc = X0[3]
+	w = X0[4]
+	u1 = X0[5]
+	u2 = X0[6]
+	
+	flux_model = lc_model(phase, rp, a, t0 = 0., per = 1., inc = inc, ecc = ecc, w = w, limb_dark = "quadratic", u = [u1, u2])
+
+	chi_vals = np.sqrt((flux - flux_model)**2 / err**2)
+	
+	fit_val = np.sum(chi_vals) / (len(chi_vals) - 1)
+	
+	return fit_val
+
+def best_fit_LC_solve(phase, flux, per, rp, a, t0=0., inc=89., ecc=0., w=90., ld="quadratic", u=[0.1, 0.3]):
+	
+	bins = [p * per * 24 * 60 // 10 for p in phase]
+	length = np.int(max(bins) - min(bins))
+	print(length)
+	p_bin = np.zeros(length)
+	f_bin = np.zeros(length)
+	e_bin = np.zeros(length)
+	sigma = np.std(flux)
+	for i in range(length):
+#		if len(np.where(bins == i + min(bins))[0]) == 1:
+#			p_bin[i] = phase[i]
+#			f_bin[i] = flux[i]
+#			e_bin[i] = sigma
+		
+		if len(np.where(bins == i + min(bins))[0]) > 0:
+			p_bin[i] = np.mean(phase[np.where(bins == i + min(bins))[0]])
+			f_bin[i] = np.mean(flux[np.where(bins == i + min(bins))[0]])
+			e_bin[i] = sem(flux[np.where(bins == i + min(bins))[0]])
+		else:
+			p_bin[i] = -1000
+			f_bin[i] = -1000
+			e_bin[i] = -1000
+	
+	p_bin = np.delete(p_bin, np.where(p_bin < -900))
+	f_bin = np.delete(f_bin, np.where(f_bin < -900))
+	e_bin = np.delete(e_bin, np.where(e_bin < -900))
+	
+	print(np.where(np.isnan(e_bin)))
+	
+	res = mini(fit_phasefolded, [rp, a, inc, ecc, w, u[0], u[1]], args=(p_bin, f_bin, e_bin))
+	for i in range(20):
+		if res.success == False:
+			res = mini(fit_phasefolded, res.x, args=(p_bin, f_bin, e_bin))
+		else: res = res
+		
+#		print(res.success)
+#	t0_best = res.x[0]
+	rp_best = res.x[0]
+	a_best = res.x[1]
+	inc_best = res.x[2]
+	ecc_best = res.x[3]
+	w_best = res.x[4]
+	u1_best, u2_best = res.x[5], res.x[6]
+	
+	flux_best = lc_model(p_bin, rp_best, a_best, t0 = 0., per = 1., inc = inc_best, ecc = ecc_best, w = w_best, limb_dark = "quadratic", u = [u1_best, u2_best])
+	
+	return flux_best, p_bin, f_bin, e_bin, res.x, res.fun
+
+
+def best_fit_LC_solve_qlp(phase, flux, rp, a, t0=0., inc=90., ecc=0., w=90., ld="quadratic", u=[0.1, 0.3]):
+	
+	phase = np.array(phase, dtype='float64')
+	
+	res = mini(fit_phasefolded, [rp, a, inc, ecc, w, u[0], u[1]], args=(phase, flux, np.zeros(len(flux))+np.std(flux)))
+	
+	for i in range(20):
+		if res.success == False:
+			res = mini(fit_phasefolded, res.x, args=(phase, flux, np.zeros(len(flux))+np.std(flux)))
+		else: res = res
+		
+		#print(res.success)
+#	t0_best = res.x[0]
+	rp_best = res.x[0]
+	a_best = res.x[1]
+	inc_best = res.x[2]
+	ecc_best = res.x[3]
+	w_best = res.x[4]
+	u1_best, u2_best = res.x[5], res.x[6]
+	
+	flux_best = lc_model(phase, rp_best, a_best, t0 = 0., per = 1., inc = inc_best, ecc = ecc_best, w = w_best, limb_dark = "quadratic", u = [u1_best, u2_best])
+	
+	return flux_best, res.x, res.fun
+
+
+	
+def plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs, sector):
 	
 	fig = plt.figure(figsize=(30, 20))
 	
@@ -162,7 +259,7 @@ def plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag,
 	ax1.set_ylabel('Raw SAP Flux [e$^-$ / s]', **axis_font)
 	ax1.set_xlabel('Time [BJD - 2457000]', **axis_font) 
 	ax1.tick_params(labelsize=20)
-	ax1.set_title('T = {} ; Rs = {} ;  Period: {} days \n TOI: {} ;  TIC ID: {}'.format(Tmag, Rs, period, TOI, TIC), **axis_font)
+	ax1.set_title('T = {} ; Rs = {} ;  Period: {} days \n TOI: {} ;  TIC ID: {} ;  Sector: {}'.format(Tmag, Rs, period, TOI, TIC, sector), **axis_font)
 
 
 	#Middle subplot: Unfolded LC
@@ -181,55 +278,66 @@ def plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag,
 	ax3.tick_params(labelsize=20)
 	ax3.set_xlabel('Phase', **axis_font)
 	
-	plt.tight_layout()
+#	plt.tight_layout()
 	
 	if save:
-		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc.png'.format(TOI, TIC))
+		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc_sector{}.png'.format(TOI, TIC, sector))
 		plt.close()
 	
 	else:
 		plt.show()
 	
-def plot_LC_spoc_model(time, raw_flux, flux_normalised, flux_model, phase, phase_model, TOI, TIC, period, Tmag, Rs):
+def plot_LC_model(flux_normalised, flux_model, phase, phase_model, f_bin, e_bin, TOI, TIC, period, Tmag, Rs, sector, rp, a, inc, fit_val):
 	
 	fig = plt.figure(figsize=(30, 20))
 	
-	#Top Subplot: Raw SAP Flux
-	ax1 = fig.add_subplot(311)
-	ax1.plot(time, raw_flux, 'ko', markersize=1.5)
-	ax1.set_ylabel('Raw SAP Flux [e$^-$ / s]', **axis_font)
-	ax1.set_xlabel('Time [BJD - 2457000]', **axis_font) 
-	ax1.tick_params(labelsize=20)
-	ax1.set_title('T = {} ; Rs = {} ;  Period: {} days \n TOI: {} ;  TIC ID: {}'.format(Tmag, Rs, period, TOI, TIC), **axis_font)
-
-
-	#Middle subplot: Unfolded LC
-	ax2 = fig.add_subplot(312)
-	ax2.plot(time, flux_normalised, 'ko', markersize='1.5')
-	ax2.set_ylabel('Relative Flux', **axis_font)
-	ax2.set_xlabel('Time [BJD - 2457000]', **axis_font)
-	ax2.tick_params(labelsize=20)
-	
 	#Bottom subplot: Folded LC
-	ax3 = fig.add_subplot(313)
+	ax1 = fig.add_subplot(111)
 
-	ax3.plot(phase, flux_normalised, 'bo', markersize='1.5')
-	ax3.plot(phase_model, flux_model, 'r-')
-	ax3.set_ylabel('Relative Flux', **axis_font)
-	ax3.set_xticks([-0.25, 0.0, 0.25, 0.5, 0.75])
-	ax3.tick_params(labelsize=20)
-	ax3.set_xlabel('Phase', **axis_font)
+	ax1.plot(phase, flux_normalised, 'ko', markersize='1.5')
+	ax1.errorbar(phase_model, f_bin, yerr=e_bin, marker='o', color='red', linestyle='none', markersize=3)
+	ax1.plot(phase_model, flux_model, 'b-')
+	ax1.set_ylabel('Relative Flux', **axis_font)
+	ax1.set_xticks([-0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7])
+	ax1.tick_params(labelsize=20)
+	ax1.set_xlabel('Phase', **axis_font)
+	ax1.set_title('T = {:.2f}; Rs = {:.2f}; P = {:.2f} days; TIC: {}; Sector: {} \n Rp = {:.4f} Rs; a = {:.3f} Rs;  i = {:.3f} deg;  $\chi^2$ = {:.3f}'.format(Tmag, Rs, period, TIC, sector, rp, a, inc, fit_val), **axis_font)
 	
-	plt.tight_layout()
+#	plt.tight_layout()
 	
 	if save:
-		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc_withmodel.png'.format(TOI, TIC))
+		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc_sector{}_withmodel.png'.format(TOI, TIC, sector))
 		plt.close()
 	
 	else:
 		plt.show()
 
-def plot_LC_qlp(time, phase, flux, TOI, TIC, period, Tmag, Rs):
+def plot_LC_model_qlp(flux_normalised, flux_model, phase, phase_model, TOI, TIC, period, Tmag, Rs, sector, rp, a, inc, fit_val):
+	
+	fig = plt.figure(figsize=(30, 20))
+	
+	#Bottom subplot: Folded LC
+	ax1 = fig.add_subplot(111)
+
+	ax1.plot(phase, flux_normalised, 'ko', markersize='3')
+	ax1.plot(phase_model, flux_model, 'bo')
+	ax1.set_ylabel('Relative Flux', **axis_font)
+	ax1.set_xticks([-0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7])
+	ax1.tick_params(labelsize=20)
+	ax1.set_xlabel('Phase', **axis_font)
+	ax1.set_title('T = {:.2f}; Rs = {:.2f}; P = {:.2f} days; TIC: {}; Sector: {} \n Rp = {:.4f} Rs; a = {:.3f} Rs;  i = {:.3f} deg;  $\chi^2$ = {:.3f}'.format(Tmag, Rs, period, TIC, sector, rp, a, inc, fit_val), **axis_font)
+	
+#	plt.tight_layout()
+	
+	if save:
+		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc_sector{}_withmodel.png'.format(TOI, TIC, sector))
+		plt.close()
+	
+	else:
+		plt.show()
+
+
+def plot_LC_qlp(time, phase, flux, TOI, TIC, period, Tmag, Rs, sector):
 	
 	fig = plt.figure(figsize=(30, 20))
 				
@@ -239,7 +347,7 @@ def plot_LC_qlp(time, phase, flux, TOI, TIC, period, Tmag, Rs):
 	ax1.set_ylabel('Relative Flux', **axis_font)
 	ax1.set_xlabel('Time [BJD - 2457000]', **axis_font)
 	ax1.tick_params(labelsize=20)
-	ax1.set_title('T = {} ; Rs = {} ;  Period: {} days \n TOI: {} ;  TIC ID: {}'.format(Tmag, Rs, period, TOI, TIC), **axis_font)
+	ax1.set_title('T = {} ; Rs = {} ;  Period: {} days \n TOI: {} ;  TIC ID: {} ; Sector: {}'.format(Tmag, Rs, period, TOI, TIC, sector), **axis_font)
 
 	#Bottom subplot: Folded LC
 	ax2 = fig.add_subplot(212)
@@ -252,13 +360,13 @@ def plot_LC_qlp(time, phase, flux, TOI, TIC, period, Tmag, Rs):
 	plt.tight_layout()
 	
 	if save:
-		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc.png'.format(TOI, TIC))
+		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc_sector{}.png'.format(TOI, TIC, sector))
 	
 	else:
 		plt.show()
 
 
-def plot_LC_qlp_model(time, phase, flux, flux_model, phase_model, TOI, TIC, period, Tmag, Rs):
+def plot_LC_qlp_model(time, phase, flux, flux_model, phase_model, TOI, TIC, period, Tmag, Rs, sector):
 	
 	fig = plt.figure(figsize=(30, 20))
 				
@@ -268,7 +376,7 @@ def plot_LC_qlp_model(time, phase, flux, flux_model, phase_model, TOI, TIC, peri
 	ax1.set_ylabel('Relative Flux', **axis_font)
 	ax1.set_xlabel('Time [BJD - 2457000]', **axis_font)
 	ax1.tick_params(labelsize=20)
-	ax1.set_title('T = {} ; Rs = {} ;  Period: {} days \n TOI: {} ;  TIC ID: {}'.format(Tmag, Rs, period, TOI, TIC), **axis_font)
+	ax1.set_title('T = {} ; Rs = {} ;  Period: {} days \n TOI: {} ;  TIC ID: {} ; Sector: {}'.format(Tmag, Rs, period, TOI, TIC, sector), **axis_font)
 
 	#Bottom subplot: Folded LC
 	ax2 = fig.add_subplot(212)
@@ -282,7 +390,7 @@ def plot_LC_qlp_model(time, phase, flux, flux_model, phase_model, TOI, TIC, peri
 	plt.tight_layout()
 	
 	if save:
-		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc_withmodel.png'.format(TOI, TIC))
+		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc_sector{}_withmodel.png'.format(TOI, TIC, sector))
 	
 	else:
 		plt.show()
@@ -295,6 +403,8 @@ if __name__ == "__main__":
 	parser.add_argument('-lk', '--lightkurve', action='store_true')
 	parser.add_argument('-wl', '--window_length', type=int)
 	parser.add_argument('-m', '--model', action='store_true')
+	parser.add_argument('-r', '--radius', type=float)
+	parser.add_argument('-a', '--smaxis', type=float)
 	
 	args = parser.parse_args()
 	
@@ -303,6 +413,7 @@ if __name__ == "__main__":
 	lightkurve = args.lightkurve
 	windowlength = args.window_length
 	mod = args.model
+	rp, a = args.radius, args.smaxis
 	
 	axis_font = {'fontname':'DejaVu Sans', 'size':'30'}
 	df = pandas.read_csv('/home/astro/phrvdf/tess_data_alerts/TOIs_20181016.csv', index_col='tic_id')		#.csv file containing info on parameters (period, epoch, ID, etc.) of all TOIs
@@ -318,6 +429,7 @@ if __name__ == "__main__":
 			TIC = hdr['TICID']							#Loads TIC ID number from the fits header
 			Tmag = hdr['TESSMAG']						#Loads TESS mag from fits header
 			Rs = hdr['RADIUS']							#Loads stellar radius [solar radius] from fits header
+			sector = hdr['SECTOR']						#Loads observing sector data was obtained in
 			
 			df2 = df.loc[TIC]
 			
@@ -345,15 +457,16 @@ if __name__ == "__main__":
 					
 				phase, phase_days = phase_fold(time, epoch, period)
 			
-				flux_normalised = normalise_LC(flux, phase, period, T_dur)
+				flux_normalised, err_normalised = normalise_LC(flux, fluxerr, phase, period, T_dur)
 				
 				if mod:
-					phase_sort = np.sort(phase)
-					phase_model = np.array(phase_sort, dtype='float64')
-					flux_model = lc_model()
-					plot_LC_spoc_model(time, raw_flux, flux_normalised, flux_model, phase, phase_model, TOI, TIC, period, Tmag, Rs)
+					flux_best, p_bin, f_bin, e_bin, best_fit_params, fit_val = best_fit_LC_solve(phase, flux_normalised, period, rp, a, t0=0., inc=89., ecc=0., w=90., ld="quadratic", u=[0.1, 0.3])
+					
+					print(best_fit_params, fit_val)
+					
+					plot_LC_model(flux_normalised, flux_best, phase, p_bin, f_bin, e_bin, TOI, TIC, period, Tmag, Rs, sector, best_fit_params[0], best_fit_params[1], best_fit_params[2], fit_val)
 				else:
-					plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs)
+					plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs, sector)
 
 				print(TIC, TOI)
 				
@@ -385,7 +498,7 @@ if __name__ == "__main__":
 						flux_model = lc_model()
 						plot_LC_spoc_model(time, raw_flux, flux_normalised, flux_model, phase, phase_model, TOI, TIC, period, Tmag, Rs)
 					else:
-						plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs)
+						plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag, Rs, sector)
 
 					print(TIC, TOI)
 			
@@ -418,10 +531,15 @@ if __name__ == "__main__":
 				phase, phase_days = phase_fold(time, epoch, period)
 								
 				if mod:
-					phase_sort = np.sort(phase)
-					phase_model = np.array(phase_sort, dtype='float64')
-					flux_model = lc_model()
-					plot_LC_qlp_model(time, phase, flux, flux_model, phase_model, TOI, TIC, period, Tmag, Rs)
+					flux_best, best_fit_params, fit_val = best_fit_LC_solve_qlp(phase, flux, rp, a, t0=0., inc=89., ecc=0., w=90., ld="quadratic", u=[0.1, 0.3])
+					
+					s = phase.argsort()
+					flux_model = flux_best[s]
+					phase_model = phase[s]
+					
+					print(best_fit_params, fit_val)
+					
+					plot_LC_model_qlp(flux, flux_model, phase, phase_model, TOI, TIC, period, Tmag, Rs, 1, best_fit_params[0], best_fit_params[1], best_fit_params[2], fit_val)
 				else:
 					plot_LC_qlp(time, phase, flux, TOI, TIC, period, Tmag, Rs)
 				
