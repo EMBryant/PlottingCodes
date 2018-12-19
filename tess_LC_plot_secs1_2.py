@@ -122,7 +122,7 @@ def plot_LC_spoc(time, raw_flux, flux_normalised, phase, TOI, TIC, period, Tmag,
 	plt.tight_layout()
 	
 	if save:
-		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc_sector1&2_doubleP.png'.format(TOI, TIC))
+		plt.savefig('/home/astro/phrvdf/tess_data_alerts/tess_LC_plots/tess_{}_{}_lc_sector1&2.png'.format(TOI, TIC))
 		plt.close()
 	
 	else:
@@ -163,7 +163,7 @@ if __name__ == "__main__":
 		if len(df2) == length:
 				
 			epoch = df2.loc['Epoc'] 		      	#Time of first transit centre [BJD - 2457000]
-			period = 2*df2.loc['Period']			  	#Orbital Period [days]
+			period = df2.loc['Period']			  	#Orbital Period [days]
 			T_dur = df2.loc['Duration']				#Transit duration [hours]
 			TOI = df2.loc['toi_id']            	  	#TIC ID for the object - used for plot title
 			comments = df2.loc['Comment']			#Any existing comments on the object

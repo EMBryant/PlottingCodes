@@ -41,8 +41,8 @@ if __name__ == "__main__":
 	
 	plt.plot(Tmags, rms5, 'ko', markersize=5, label='TESS - 0.5 Hour')
 	plt.plot(14.04, 2198.769, 'ro', markersize=5, label='NGTS - 0.5 Hour')
-	plt.plot(Tmags, rms1, 'bo', markersize=5, label='TESS - 1 Hour')
-	plt.plot(Tmags, rms2, 'go', markersize=5, label='TESS - 2 Hour')
+#	plt.plot(Tmags, rms1, 'bo', markersize=5, label='TESS - 1 Hour')
+#	plt.plot(Tmags, rms2, 'go', markersize=5, label='TESS - 2 Hour')
 	plt.xlabel('TESS Magnitude', **axis_font)
 	plt.ylabel('RMS [ppm]', **axis_font)
 	plt.title('RMS CDPP - multiple timescales', **axis_font)
